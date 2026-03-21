@@ -66,6 +66,7 @@ html,body{height:100%;font-family:var(--font);background:var(--bg0);color:var(--
   display:flex !important;
   flex-direction:column;
   overflow:hidden;
+  overflow-y:auto;
   /* ABSOLUTE PIXEL LOCK — grid column + explicit width + clipping */
   width:300px !important;
   min-width:300px !important;
@@ -296,11 +297,11 @@ html,body{height:100%;font-family:var(--font);background:var(--bg0);color:var(--
 #proj-div{height:150px;position:relative;overflow:hidden}
 
 /* Zone 1: AI Signal — capped height, scrollable */
-.rp-z1{border-bottom:1px solid var(--bd);padding:10px 12px;min-height:0;overflow-y:auto;max-height:40vh;flex-shrink:0}
+.rp-z1{border-bottom:1px solid var(--bd);padding:10px 12px;min-height:0;overflow-y:auto;max-height:none;flex-shrink:0}
 /* Zone 2: Forecast mini chart — fixed, never grows */
-.rp-z2{border-bottom:1px solid var(--bd);padding:10px 12px;min-height:0;overflow:hidden;flex-shrink:0;max-height:160px}
+.rp-z2{border-bottom:1px solid var(--bd);padding:10px 12px;min-height:0;overflow:hidden;flex-shrink:0;max-height:140px}
 /* Zone 3: AI Options Analysis — fills ALL remaining space, scrollable */
-.rp-z3{overflow-y:auto;overflow-x:hidden;min-height:0;flex:1}
+.rp-z3{overflow-y:auto;overflow-x:hidden;min-height:0;flex:1;min-height:100px}
 .rp-hdr{font-size:8px;text-transform:uppercase;letter-spacing:.9px;color:var(--t3);font-weight:700;margin-bottom:7px;display:flex;align-items:center;gap:6px}
 .rp-dot{width:5px;height:5px;border-radius:50%;flex-shrink:0}
 .rp-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:30px 20px;gap:10px;color:var(--t3);grid-row:1/-1}
@@ -522,67 +523,42 @@ html,body{height:100%;font-family:var(--font);background:var(--bg0);color:var(--
 /* Responsive — rpanel always stays, only sidebar/inav collapse on small screens */
 @media(max-width:1200px){.body{grid-template-columns:48px 200px minmax(0,1fr) 280px}.rpanel{width:280px!important;min-width:280px!important;max-width:280px!important}}
 @media(max-width:1000px){.body{grid-template-columns:44px 180px minmax(0,1fr) 260px}.rpanel{width:260px!important;min-width:260px!important;max-width:260px!important}}
+/* Laptop fix: ensure rpanel always visible and scrollable */
+@media(min-width:601px){
+  .rpanel{display:flex!important;flex-direction:column;visibility:visible!important;opacity:1!important;overflow-y:auto!important}
+  .rp-z1{max-height:45vh!important;overflow-y:auto!important;flex-shrink:0!important}
+  .rp-z2{max-height:150px!important;flex-shrink:0!important}
+  .rp-z3{flex:1!important;overflow-y:auto!important;min-height:80px!important}
+}
+/* Laptop fix: ensure rpanel always visible and scrollable */
+@media(min-width:601px){
+  .rpanel{display:flex!important;flex-direction:column;visibility:visible!important;opacity:1!important;overflow-y:auto!important}
+  .rp-z1{max-height:45vh!important;overflow-y:auto!important;flex-shrink:0!important}
+  .rp-z2{max-height:150px!important;flex-shrink:0!important}
+  .rp-z3{flex:1!important;overflow-y:auto!important;min-height:80px!important}
+}
 @media(max-width:780px){.body{grid-template-columns:0 0 minmax(0,1fr) 220px}.sidebar,.inav{display:none!important}.rpanel{width:220px!important;min-width:220px!important;max-width:220px!important}}
 
-/* ── MOBILE SEARCH BAR ── */
-.mob-search{display:none;align-items:center;gap:6px;padding:6px 10px;background:var(--bg1);border-bottom:1px solid var(--bd);position:sticky;top:48px;z-index:99;width:100%}
-.mob-search input{flex:1;background:var(--bg2);border:1px solid var(--bd2);color:var(--t1);padding:8px 12px;border-radius:9px;font-size:13px;font-family:var(--font);outline:none}
-.mob-search input:focus{border-color:var(--g)}
-.mob-search input::placeholder{color:var(--t3)}
-.mob-search button{background:var(--g);border:none;border-radius:8px;padding:8px 14px;color:#000;font-weight:800;cursor:pointer;font-size:13px}
 
-/* ── PHONE: stack chart above rpanel ── */
-@media(max-width:600px){
-  html,body{overflow:auto!important;height:auto!important}
-  .app{display:flex;flex-direction:column;height:auto!important;min-height:100vh}
-  .body{display:flex;flex-direction:column;height:auto!important;overflow:visible!important;min-height:0}
-  .sidebar,.inav{display:none!important}
-  .main{max-width:100vw!important;width:100vw!important;height:auto!important;clip-path:none!important;overflow:visible!important;min-height:0}
-  .cbody{height:320px!important;min-height:320px!important;max-height:320px!important;overflow:hidden!important}
-  #lwc-main{height:240px!important;min-height:240px!important}
-  .vol-wrap{height:52px!important}
-  .rpanel{width:100vw!important;min-width:100vw!important;max-width:100vw!important;border-left:none!important;border-top:1px solid var(--bd);height:auto!important;max-height:none!important;overflow-y:visible!important;position:relative!important;z-index:10!important}
-  .rp-z1{max-height:none!important;overflow-y:visible!important}
-  .rp-z2{max-height:220px!important}
-  .rp-z3{overflow-y:visible!important;flex:none!important;min-height:0!important}
-  .topbar{padding:0 8px!important;gap:4px!important}
-  .belt{display:none!important}
-  .logo-txt{font-size:14px!important}
-  .mob-search{display:flex!important}
-  .chart-hdr{flex-wrap:wrap!important;height:auto!important;padding:3px 4px!important;gap:2px!important;min-height:auto!important}
-  .tabs{max-width:100vw!important;overflow-x:auto!important;flex-shrink:1!important}
-  .tab{padding:4px 8px!important;font-size:11px!important}
-  .tfs{max-width:100vw!important;overflow-x:auto!important;flex-shrink:1!important}
-  .tf{padding:3px 7px!important;font-size:10px!important}
-  .ohlc-bar{display:none!important}
-  .draw-bar{display:none!important}
-  .sp{display:none!important}
-  .action-bar{padding:0 6px!important;gap:6px!important;height:38px!important}
-  #liveInd{display:none!important}
-  #_themeBtn{bottom:12px!important;right:12px!important;width:36px!important;height:36px!important;font-size:15px!important}
+/* ── BACK BUTTON ── */
+.back-btn{
+  display:none;
+  align-items:center;
+  justify-content:center;
+  width:32px;height:32px;
+  border:1px solid var(--bd2);
+  background:var(--bg2);
+  color:var(--t2);
+  border-radius:8px;
+  cursor:pointer;
+  font-size:16px;
+  flex-shrink:0;
+  transition:.15s;
+  text-decoration:none;
 }
-
-/* ── LANDSCAPE PHONE ── */
-@media(max-width:900px) and (orientation:landscape){
-  html,body{overflow:hidden!important;height:100vh!important}
-  .app{display:grid;grid-template-rows:48px 1fr;height:100vh!important}
-  .body{display:flex;flex-direction:row!important;height:100%!important;overflow:hidden!important}
-  .sidebar,.inav{display:none!important}
-  .main{flex:1!important;max-width:none!important;width:auto!important;height:100%!important;clip-path:none!important;overflow:hidden!important}
-  .cbody{height:calc(100% - 120px)!important;max-height:none!important}
-  #lwc-main{height:calc(100% - 60px)!important}
-  .rpanel{width:260px!important;min-width:260px!important;max-width:260px!important;height:100%!important;overflow-y:auto!important;border-left:1px solid var(--bd)!important;border-top:none!important}
-  .draw-bar{display:none!important}
-  .mob-search{display:none!important}
-}
-
-@media(max-width:380px){
-  .tab{padding:3px 6px!important;font-size:10px!important}
-  .tf{padding:2px 5px!important;font-size:9px!important}
-  .cbody{height:280px!important;min-height:280px!important}
-  #lwc-main{height:200px!important}
-}
-
+.back-btn:hover{border-color:var(--g);color:var(--g);background:var(--gbg)}
+/* Show back button when a symbol is loaded */
+body[data-has="1"] .back-btn{display:flex}
 /* Light theme */
 body.lt{--bg0:#EFF3FB;--bg1:#FFFFFF;--bg2:#F5F8FE;--bg3:#E8EFF8;--bd:rgba(0,0,0,.09);--bd2:rgba(0,0,0,.17);--t1:#17243A;--t2:#4A5E78;--t3:#94A3B8}
 body.lt .topbar::after{opacity:.4}
@@ -608,13 +584,6 @@ body.lt .topbar::after{opacity:.4}
   <span id="hdrChg" class="hdr-chg"></span>
   <span class="mkt-pill closed" id="mktPill">NSE</span>
 </header>
-
-<!-- ══ MOBILE SEARCH (phones only) ══ -->
-<div class="mob-search" id="mobSearch">
-  <input id="mobSi" type="text" placeholder="Search NIFTY, Reliance, Apple…" autocomplete="off"
-    onkeydown="if(event.key==='Enter'){document.getElementById('si').value=this.value;doSearch()}">
-  <button onclick="document.getElementById('si').value=document.getElementById('mobSi').value;doSearch()">🔍 Go</button>
-</div>
 
 <div class="body">
 
@@ -1283,7 +1252,10 @@ async function loadLWC() {
     const _initChart = () => {
       const r   = mW.getBoundingClientRect();
       // Clamp: chart can NEVER be wider than viewport minus fixed columns
-      const maxW = window.innerWidth - 48 - 220 - 300 - 4;
+      // Dynamic: measure actual rpanel width instead of hardcoded 300
+      const _rpW = document.querySelector('.rpanel')?.getBoundingClientRect().width || 300;
+      const _sbW = window.innerWidth > 780 ? (window.innerWidth > 1000 ? (window.innerWidth > 1200 ? 220 : 180) : 160) : 0;
+      const maxW = window.innerWidth - 48 - _sbW - _rpW - 4;
       const cW   = Math.max(200, Math.min(r.width || 600, maxW));
       const cH   = Math.max(200, r.height || 400);
       lwcM = LightweightCharts.createChart(mW, {
@@ -1356,7 +1328,7 @@ async function loadLWC() {
     // Volume chart
     // Volume chart — explicit size, NO autoSize
     const _vR = vW.getBoundingClientRect();
-    const _vW2 = Math.max(200, Math.min(_vR.width||600, window.innerWidth-48-220-300-4));
+    const _rpW2 = document.querySelector('.rpanel')?.getBoundingClientRect().width || 300; const _vW2 = Math.max(200, Math.min(_vR.width||600, window.innerWidth-48-220-_rpW2-4));
     lwcV = LightweightCharts.createChart(vW, {...baseOpts, width:_vW2, height:70});
     vSer = lwcV.addHistogramSeries({
       priceFormat:{type:"volume"}, priceScaleId:"", scaleMargins:{top:0.1, bottom:0}
@@ -1405,7 +1377,11 @@ async function loadLWC() {
     // ── Resize Observer — clamps chart to its grid column ──────────
     // This replaces autoSize. We observe the mW container and resize
     // the chart explicitly, clamping to available grid column width.
-    const _maxChartW = () => window.innerWidth - 48 - 220 - 300 - 4;
+    const _maxChartW = () => {
+      const rpW = document.querySelector('.rpanel')?.getBoundingClientRect().width || 300;
+      const sbW = window.innerWidth > 780 ? (window.innerWidth > 1000 ? (window.innerWidth > 1200 ? 220 : 180) : 160) : 0;
+      return Math.max(200, window.innerWidth - 48 - sbW - rpW - 4);
+    };
     const _chartRO = new ResizeObserver(entries => {
       for (const e of entries) {
         const w = Math.max(200, Math.min(e.contentRect.width, _maxChartW()));
@@ -2045,18 +2021,99 @@ function loadTV() {
 
 /* ════ NEWS ════ */
 let newsDone = false;
+let newsCat = "all";
+
+function sentBadge(title) {
+  const t = title.toLowerCase();
+  const bull = ["surge","rally","gain","rise","high","growth","profit","up","bull","strong","beat","record","positive","jump","soar","boost"];
+  const bear = ["fall","drop","crash","loss","down","weak","miss","bear","sell","decline","cut","risk","concern","slump","plunge","tumble"];
+  const bs = bull.filter(w=>t.includes(w)).length;
+  const rs = bear.filter(w=>t.includes(w)).length;
+  if (bs > rs) return `<span style="font-size:8px;font-weight:800;padding:1px 5px;border-radius:3px;background:var(--gbg);color:var(--g)">▲ Positive</span>`;
+  if (rs > bs) return `<span style="font-size:8px;font-weight:800;padding:1px 5px;border-radius:3px;background:var(--rbg);color:var(--r)">▼ Negative</span>`;
+  return `<span style="font-size:8px;font-weight:800;padding:1px 5px;border-radius:3px;background:var(--abg);color:var(--am)">● Neutral</span>`;
+}
+
+function renderNewsList(list) {
+  if (!list.length) {
+    document.getElementById("newsList").innerHTML = `
+      <div class="empty">
+        <div class="empty-ic">📰</div>
+        <p style="font-size:13px;font-weight:700;color:var(--t2)">No news available</p>
+        <p style="font-size:11px;color:var(--t3);margin-top:4px">Try refreshing or check back later</p>
+        <button onclick="newsDone=false;loadNews()" style="margin-top:12px;padding:8px 16px;background:var(--g);border:none;border-radius:8px;color:#000;font-weight:700;cursor:pointer;font-size:12px">Refresh</button>
+      </div>`;
+    return;
+  }
+  const _catLabel = {all:"All",india:"India",global:"Global",commodity:"Commodity",crypto:"Crypto"};
+  document.getElementById("newsList").innerHTML = `
+    <div style="display:flex;gap:6px;padding:8px 10px;border-bottom:1px solid var(--bd);overflow-x:auto;flex-shrink:0;background:var(--bg1);position:sticky;top:0;z-index:5">
+      ${["all","india","global","commodity","crypto"].map(c=>`
+        <button onclick="setNewsCat('${c}')" id="nc-${c}" style="padding:4px 10px;border:1px solid ${c===newsCat?'var(--g)':'var(--bd2)'};background:${c===newsCat?'var(--gbg)':'var(--bg2)'};color:${c===newsCat?'var(--g)':'var(--t2)'};border-radius:20px;font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap;font-family:var(--font)">${_catLabel[c]}</button>`).join("")}
+      <button onclick="newsDone=false;document.getElementById('newsList').innerHTML='';loadNews()" style="margin-left:auto;padding:4px 8px;border:1px solid var(--bd2);background:var(--bg2);color:var(--t3);border-radius:20px;font-size:10px;cursor:pointer">Refresh</button>
+    </div>
+    <div id="newsItemsWrap">
+      ${list.map((n,i)=>`
+        <a class="news-item" href="${n.url}" target="_blank" rel="noopener" style="${i===0?'flex-direction:column':''}">
+          ${i===0 && n.thumbnail ? `<img style="width:100%;height:130px;object-fit:cover;border-radius:6px 6px 0 0;flex-shrink:0" src="${n.thumbnail}" alt="" onerror="this.style.display='none'">` :
+            n.thumbnail ? `<img class="news-thumb" src="${n.thumbnail}" alt="" onerror="this.style.display='none'">` : ""}
+          <div style="${i===0?'padding:8px 10px':''}">
+            <div style="display:flex;align-items:center;gap:5px;margin-bottom:3px;flex-wrap:wrap">
+              <span style="font-size:9px;color:var(--t3);font-weight:700">${n.source||"News"}</span>
+              ${sentBadge(n.title)}
+              ${n.pubDate?`<span style="font-size:9px;color:var(--t3);margin-left:auto">${n.pubDate}</span>`:""}
+            </div>
+            <div class="news-title" style="${i===0?'font-size:13px;font-weight:800':'font-size:11px'}">${n.title}</div>
+          </div>
+        </a>`).join("")}
+    </div>`;
+}
+
+const _newsKW = {
+  india:     ["india","nse","bse","nifty","sensex","sebi","rbi","rupee","reliance","tata","infosys","hdfc","icici","sbi","bajaj","airtel","inr","mumbai","delhi","moneycontrol","economic times","livemint","business standard"],
+  global:    ["fed","us market","wall street","nasdaq","s&p","dow","europe","china","japan","uk","ecb","dollar","treasury","global","world","economy","gdp","inflation","rate","reuters","cnbc"],
+  commodity: ["gold","silver","crude","oil","metal","copper","aluminium","steel","commodity","wheat","corn","natural gas","brent","wti","opec","precious"],
+  crypto:    ["bitcoin","btc","ethereum","eth","crypto","blockchain","binance","coinbase","defi","nft","solana","web3","altcoin","digital currency"],
+};
+
+function setNewsCat(cat) {
+  newsCat = cat;
+  ["all","india","global","commodity","crypto"].forEach(c => {
+    const b = document.getElementById("nc-"+c);
+    if (!b) return;
+    b.style.borderColor = c===cat ? "var(--g)" : "var(--bd2)";
+    b.style.background  = c===cat ? "var(--gbg)" : "var(--bg2)";
+    b.style.color       = c===cat ? "var(--g)" : "var(--t2)";
+  });
+  const wrap = document.getElementById("newsItemsWrap");
+  if (!wrap) return;
+  wrap.querySelectorAll(".news-item").forEach(el => {
+    if (cat === "all") { el.style.display = ""; return; }
+    const text = el.textContent.toLowerCase();
+    el.style.display = (_newsKW[cat]||[]).some(k=>text.includes(k)) ? "" : "none";
+  });
+}
+
 async function loadNews() {
-  if (newsDone) return; newsDone = true; showL("Loading news…");
+  if (newsDone) return;
+  newsDone = true;
+  showL("Loading market news…");
   try {
-    const items = await fetch(`/news?symbol=${enc(YAHOO||"RELIANCE.NS")}`).then(r=>r.json());
+    const sym = YAHOO || "RELIANCE.NS";
+    const items = await fetch(`/news?symbol=${enc(sym)}`).then(r=>r.json());
     const list = Array.isArray(items) ? items : [];
-    if (!list.length) { document.getElementById("newsList").innerHTML=`<div class="empty"><div class="empty-ic">📰</div><p>No news</p></div>`; hideL(); return; }
-    document.getElementById("newsList").innerHTML = list.map(n=>`
-      <a class="news-item" href="${n.url}" target="_blank" rel="noopener">
-        ${n.thumbnail?`<img class="news-thumb" src="${n.thumbnail}" alt="" onerror="this.style.display='none'">`:""}
-        <div><div class="news-title">${n.title}</div><div class="news-meta"><span>${n.source||"Yahoo Finance"}</span>${n.pubDate?`<span>${n.pubDate}</span>`:""}</div></div>
-      </a>`).join("");
-  } catch(e) {}
+    if (!list.length) {
+      const mkt = await fetch("/news/market").then(r=>r.json()).catch(()=>[]);
+      renderNewsList(Array.isArray(mkt) ? mkt : []);
+    } else {
+      renderNewsList(list);
+    }
+  } catch(e) {
+    try {
+      const mkt = await fetch("/news/market").then(r=>r.json());
+      renderNewsList(Array.isArray(mkt) ? mkt : []);
+    } catch(e2) { renderNewsList([]); }
+  }
   hideL();
 }
 

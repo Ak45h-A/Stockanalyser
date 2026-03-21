@@ -3,7 +3,7 @@ import yfinance as yf
 import numpy as np
 import pandas as pd
 from datetime import datetime, timezone, date, timedelta
-import math, random, calendar, time, threading, requests, json, queue, os
+import math, random, calendar, time, threading, requests, json, queue
 
 app = Flask(__name__)
 
@@ -16,27 +16,17 @@ _YF_HEADERS = {
         "AppleWebKit/537.36 (KHTML, like Gecko) "
         "Chrome/122.0.0.0 Safari/537.36"
     ),
-    "Accept":          "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "Accept":          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.9",
     "Accept-Encoding": "gzip, deflate, br",
     "Connection":      "keep-alive",
     "Referer":         "https://finance.yahoo.com/",
-    "sec-ch-ua":       '"Chromium";v="122", "Not(A:Brand";v="24", "Google Chrome";v="122"',
-    "sec-ch-ua-mobile":   "?0",
-    "sec-ch-ua-platform": '"Windows"',
-    "sec-fetch-dest":  "document",
-    "sec-fetch-mode":  "navigate",
-    "sec-fetch-site":  "same-origin",
-    "Cache-Control":   "no-cache",
-    "Pragma":          "no-cache",
-    "DNT":             "1",
-    "Upgrade-Insecure-Requests": "1",
 }
 
 _session_lock = threading.Lock()
 _yf_session   = None
 _session_born = 0.0
-_SESSION_TTL  = 900   # refresh session every 15 min on server
+_SESSION_TTL  = 1800
 
 _crumb_lock = threading.Lock()
 _crumb      = None
@@ -49,18 +39,11 @@ def _build_session():
     return s
 
 def _warm_session(s):
-    """Visit several Yahoo endpoints to get cookies + consent."""
-    warm_urls = [
-        "https://fc.yahoo.com",
-        "https://finance.yahoo.com/",
-        "https://query1.finance.yahoo.com/v1/test/getcrumb",
-    ]
-    for url in warm_urls:
-        try:
-            s.get(url, timeout=10, allow_redirects=True)
-            time.sleep(0.4)
-        except Exception:
-            pass
+    try:
+        s.get("https://finance.yahoo.com/", timeout=10)
+        time.sleep(0.3)
+    except Exception:
+        pass
     return s
 
 def _get_session(force=False):
@@ -76,23 +59,11 @@ def _get_session(force=False):
 def _fetch_crumb_raw(sess):
     for base in ("https://query1.finance.yahoo.com", "https://query2.finance.yahoo.com"):
         try:
-            r = sess.get(f"{base}/v1/test/getcrumb", timeout=8)
+            r = sess.get(f"{base}/v1/test/getcrumb", timeout=6)
             if r.status_code == 200 and r.text.strip() not in ("", "null"):
                 return r.text.strip().strip('"')
         except Exception:
             pass
-    # Try consent endpoint as fallback
-    try:
-        r = sess.get("https://finance.yahoo.com/quote/%5ENSEI/", timeout=10)
-        for base in ("https://query1.finance.yahoo.com", "https://query2.finance.yahoo.com"):
-            try:
-                r2 = sess.get(f"{base}/v1/test/getcrumb", timeout=8)
-                if r2.status_code == 200 and r2.text.strip() not in ("", "null"):
-                    return r2.text.strip().strip('"')
-            except Exception:
-                pass
-    except Exception:
-        pass
     return None
 
 def _get_crumb():
@@ -113,9 +84,8 @@ def _invalidate_crumb():
         _crumb = None; _crumb_born = 0.0
 
 def _startup():
-    time.sleep(1)
     _get_session(force=True)
-    time.sleep(1)
+    time.sleep(0.5)
     _get_crumb()
 threading.Thread(target=_startup, daemon=True).start()
 
@@ -126,51 +96,56 @@ _yf_sem = threading.Semaphore(3)
 # FALLBACK SYMBOLS
 # ══════════════════════════════════════════════════════════════════
 _IDX_FALLBACK = {
-    "^NSEI":      ["^NSEI",      "NIFTY_50.NS"],
-    "^NSEBANK":   ["^NSEBANK",   "NIFTY_BANK.NS"],
-    "^CNXIT":     ["^CNXIT",     "NIFTY_IT.NS"],
-    "^CNXAUTO":   ["^CNXAUTO",   "NIFTY_AUTO.NS"],
-    "^CNXPHARMA": ["^CNXPHARMA", "NIFTY_PHARMA.NS"],
-    "^CNXFMCG":   ["^CNXFMCG",   "NIFTY_FMCG.NS"],
-    "^CNXMETAL":  ["^CNXMETAL",  "NIFTY_METAL.NS"],
-    "^CNXREALTY": ["^CNXREALTY", "NIFTY_REALTY.NS"],
-    "^NSEMDCP50": ["^NSEMDCP50", "NIFTY_MIDCAP_50.NS"],
-    "^CNXSC":     ["^CNXSC",     "NIFTY_SMLCAP_100.NS"],
+    "^NSEI":      ["^NSEI",     "NIFTY_50.NS"],
+    "^NSEBANK":   ["^NSEBANK",  "NIFTY_BANK.NS"],
+    "^CNXIT":     ["^CNXIT",    "NIFTY_IT.NS"],
+    "^CNXAUTO":   ["^CNXAUTO",  "NIFTY_AUTO.NS"],
+    "^CNXPHARMA": ["^CNXPHARMA","NIFTY_PHARMA.NS"],
+    "^CNXFMCG":   ["^CNXFMCG",  "NIFTY_FMCG.NS"],
+    "^CNXMETAL":  ["^CNXMETAL", "NIFTY_METAL.NS"],
+    "^CNXREALTY": ["^CNXREALTY","NIFTY_REALTY.NS"],
+    "^NSEMDCP50": ["^NSEMDCP50","NIFTY_MIDCAP_50.NS"],
+    "^CNXSC":     ["^CNXSC",    "NIFTY_SMLCAP_100.NS"],
     "^BSESN":     ["^BSESN"],
-    "^INDIAVIX":  ["^INDIAVIX",  "INDIA_VIX.NS"],
+    "^INDIAVIX":  ["^INDIAVIX", "INDIA_VIX.NS"],
 }
 def _cands(sym): return _IDX_FALLBACK.get(sym, [sym])
 
 # ══════════════════════════════════════════════════════════════════
 # FAST REAL-TIME PRICE  — Yahoo Finance /v7/finance/quote
+# This is the FASTEST path: single HTTP call, returns live bid/ask
+# and the regularMarketPrice which matches what you see on Yahoo.
 # ══════════════════════════════════════════════════════════════════
 def _v7_quote(sym):
+    """
+    Fetch live quote from Yahoo /v7/finance/quote.
+    Returns dict or None. This is the fastest and most accurate
+    path — it's the same endpoint Yahoo's own site uses.
+    """
     sess  = _get_session()
     crumb = _get_crumb()
     for candidate in _cands(sym):
         for base in _BASES:
             url = f"{base}/v7/finance/quote"
             params = {
-                "symbols":    candidate,
-                "fields":     "regularMarketPrice,regularMarketPreviousClose,"
-                              "regularMarketDayHigh,regularMarketDayLow,"
-                              "regularMarketOpen,regularMarketChange,"
-                              "regularMarketChangePercent,currency,"
-                              "marketState,regularMarketTime",
-                "formatted":  "false",
-                "corsDomain": "finance.yahoo.com",
+                "symbols":            candidate,
+                "fields":             "regularMarketPrice,regularMarketPreviousClose,"
+                                      "regularMarketDayHigh,regularMarketDayLow,"
+                                      "regularMarketOpen,regularMarketChange,"
+                                      "regularMarketChangePercent,currency,"
+                                      "marketState,regularMarketTime",
+                "formatted":          "false",
+                "corsDomain":         "finance.yahoo.com",
             }
             if crumb: params["crumb"] = crumb
             try:
-                r = sess.get(url, params=params, timeout=8)
+                r = sess.get(url, params=params, timeout=5)
                 if r.status_code == 401:
-                    _invalidate_crumb()
-                    _get_session(force=True)
-                    crumb = _get_crumb()
+                    _invalidate_crumb(); _get_session(force=True); crumb = _get_crumb()
                     params["crumb"] = crumb
-                    r = sess.get(url, params=params, timeout=8)
+                    r = sess.get(url, params=params, timeout=5)
                 if r.status_code != 200: continue
-                data   = r.json()
+                data = r.json()
                 result = ((data.get("quoteResponse") or {}).get("result") or [None])[0]
                 if not result: continue
                 p = result.get("regularMarketPrice")
@@ -184,47 +159,48 @@ def _v7_quote(sym):
                         "change":    float(result.get("regularMarketChange")        or 0),
                         "changePct": float(result.get("regularMarketChangePercent") or 0),
                         "currency":  result.get("currency", ""),
-                        "marketState": result.get("marketState", ""),
+                        "marketState": result.get("marketState",""),
                     }
             except Exception:
                 pass
-        time.sleep(0.2)
+        time.sleep(0.15)
     return None
 
 # ══════════════════════════════════════════════════════════════════
 # v8 CHART API  (for OHLCV history)
 # ══════════════════════════════════════════════════════════════════
 def _v8_price(sym):
+    """v8 chart API for price — fallback if v7 fails."""
     sess = _get_session(); crumb = _get_crumb()
     for candidate in _cands(sym):
         for base in _BASES:
             url    = f"{base}/v8/finance/chart/{candidate}"
-            params = {"interval": "1d", "range": "2d", "includePrePost": "false"}
+            params = {"interval":"1d","range":"2d","includePrePost":"false"}
             if crumb: params["crumb"] = crumb
             try:
-                r = sess.get(url, params=params, timeout=8)
+                r = sess.get(url, params=params, timeout=6)
                 if r.status_code == 401:
                     _invalidate_crumb(); _get_session(force=True); crumb = _get_crumb()
-                    params["crumb"] = crumb; r = sess.get(url, params=params, timeout=8)
+                    params["crumb"] = crumb; r = sess.get(url, params=params, timeout=6)
                 if r.status_code != 200: continue
-                data = r.json()
-                res  = (data.get("chart", {}).get("result") or [None])[0]
+                data   = r.json()
+                res    = (data.get("chart",{}).get("result") or [None])[0]
                 if not res: continue
-                meta = res.get("meta", {})
-                p    = meta.get("regularMarketPrice") or meta.get("price")
+                meta   = res.get("meta",{})
+                p      = meta.get("regularMarketPrice") or meta.get("price")
                 if p:
                     prev = meta.get("previousClose") or meta.get("chartPreviousClose") or p
                     return {
-                        "price":     float(p), "prev": float(prev),
-                        "high":      float(meta.get("regularMarketDayHigh") or p),
-                        "low":       float(meta.get("regularMarketDayLow")  or p),
-                        "open":      float(meta.get("regularMarketOpen")    or p),
-                        "change":    float(p) - float(prev),
-                        "changePct": (float(p) - float(prev)) / float(prev) * 100 if prev else 0,
-                        "currency":  meta.get("currency", ""),
+                        "price":float(p),"prev":float(prev),
+                        "high":float(meta.get("regularMarketDayHigh") or p),
+                        "low":float(meta.get("regularMarketDayLow")   or p),
+                        "open":float(meta.get("regularMarketOpen")    or p),
+                        "change":float(p)-float(prev),
+                        "changePct":(float(p)-float(prev))/float(prev)*100 if prev else 0,
+                        "currency":meta.get("currency",""),
                     }
             except Exception: pass
-        time.sleep(0.2)
+        time.sleep(0.15)
     return None
 
 def _v8_history(sym, period, interval):
@@ -232,30 +208,27 @@ def _v8_history(sym, period, interval):
     for candidate in _cands(sym):
         for base in _BASES:
             url    = f"{base}/v8/finance/chart/{candidate}"
-            params = {"interval": interval, "range": period,
-                      "includePrePost": "false", "events": "div,split"}
+            params = {"interval":interval,"range":period,"includePrePost":"false","events":"div,split"}
             if crumb: params["crumb"] = crumb
             try:
-                r = sess.get(url, params=params, timeout=20)
+                r = sess.get(url, params=params, timeout=15)
                 if r.status_code == 401:
                     _invalidate_crumb(); _get_session(force=True); crumb = _get_crumb()
-                    params["crumb"] = crumb; r = sess.get(url, params=params, timeout=20)
+                    params["crumb"] = crumb; r = sess.get(url, params=params, timeout=15)
                 if r.status_code != 200: continue
                 data   = r.json()
-                result = (data.get("chart", {}).get("result") or [None])[0]
+                result = (data.get("chart",{}).get("result") or [None])[0]
                 if not result: continue
                 ts = result.get("timestamp") or []
-                q  = (result.get("indicators", {}).get("quote") or [{}])[0]
+                q  = (result.get("indicators",{}).get("quote") or [{}])[0]
                 if not ts or not q.get("close"): continue
                 n  = len(ts)
                 df = pd.DataFrame({
-                    "Open":   q.get("open",   [None] * n),
-                    "High":   q.get("high",   [None] * n),
-                    "Low":    q.get("low",    [None] * n),
-                    "Close":  q.get("close",  [None] * n),
-                    "Volume": q.get("volume", [0]    * n),
+                    "Open":q.get("open",[None]*n),"High":q.get("high",[None]*n),
+                    "Low":q.get("low",[None]*n),"Close":q.get("close",[None]*n),
+                    "Volume":q.get("volume",[0]*n),
                 }, index=pd.to_datetime(ts, unit="s", utc=True))
-                df.index.name = "Datetime"
+                df.index.name="Datetime"
                 df = df.dropna(subset=["Close"])
                 if not df.empty: return df
             except Exception: pass
@@ -268,8 +241,7 @@ def _yf_fallback(sym, period, interval):
             df = yf.download(sym, period=period, interval=interval,
                              auto_adjust=True, progress=False, session=_get_session())
         if df is not None and not df.empty:
-            if isinstance(df.columns, pd.MultiIndex):
-                df.columns = [c[0] for c in df.columns]
+            if isinstance(df.columns, pd.MultiIndex): df.columns = [c[0] for c in df.columns]
             return df
     except Exception: pass
     return pd.DataFrame()
@@ -277,27 +249,30 @@ def _yf_fallback(sym, period, interval):
 def _history(sym, period, interval):
     is_idx = sym.startswith('^') or sym in _IDX_FALLBACK
     is_nse = sym.endswith('.NS') or sym.endswith('.BO')
+    # Build a ladder of (period, interval) fallbacks
     if is_idx and interval in ('1m','2m','3m','5m','10m','15m','30m'):
         ladder = [(period,interval),('5d',interval),('1mo','30m'),('3mo','1d'),('6mo','1d')]
-    elif is_idx and interval == '1d':
+    elif is_idx and interval=='1d':
         ladder = [('6mo','1d'),('1y','1d')]
     elif interval in ('1d','1wk'):
         ladder = [(period,interval),('1y','1d'),('2y','1wk')]
     elif is_nse and interval in ('1m','2m','3m','5m','10m','15m'):
+        # NSE equities: try more period options for intraday
         ladder = [(period,interval),('5d',interval),('1mo','15m'),('3mo','30m'),('6mo','1d')]
     elif is_nse and interval == '30m':
         ladder = [(period,'30m'),('1mo','30m'),('3mo','1h'),('6mo','1d')]
     else:
         ladder = [(period,interval),('5d','30m'),('1mo','1h'),('6mo','1d')]
-    seen = set(); rungs = []
+    seen=set(); rungs=[]
     for r in ladder:
         if r not in seen: seen.add(r); rungs.append(r)
-    for p, i in rungs:
-        df = _v8_history(sym, p, i)
+    for p,i in rungs:
+        df = _v8_history(sym,p,i)
         if not df.empty: return df
-        time.sleep(0.2)
-    for p, i in rungs:
-        df = _yf_fallback(sym, p, i)
+        time.sleep(0.15)
+    # yfinance fallback — try all ladder rungs
+    for p,i in rungs:
+        df = _yf_fallback(sym,p,i)
         if not df.empty: return df
     return pd.DataFrame()
 
@@ -306,10 +281,12 @@ def _ticker(sym):
 
 # ══════════════════════════════════════════════════════════════════
 # LIVE PRICE BROADCASTER (Server-Sent Events)
+# Subscribers register a symbol; background thread polls every 2s
+# and pushes updates to all connected clients.
 # ══════════════════════════════════════════════════════════════════
-_subscribers      = {}
+_subscribers     = {}   # sym → set of queue.Queue
 _subscribers_lock = threading.Lock()
-_last_price_val   = {}
+_last_price_val  = {}   # sym → last price dict (for dedup)
 
 def _subscribe(sym):
     q = queue.Queue(maxsize=10)
@@ -331,6 +308,7 @@ def _broadcast(sym, data):
         except queue.Full: pass
 
 def _live_poller():
+    """Background thread: polls all subscribed symbols every 2s."""
     while True:
         with _subscribers_lock:
             syms = list(_subscribers.keys())
@@ -338,33 +316,33 @@ def _live_poller():
             try:
                 q = _v7_quote(sym) or _v8_price(sym)
                 if q:
-                    code    = detect_currency(sym) or q.get("currency","USD") or "USD"
-                    cs      = CSYMS.get(code, "$")
-                    p       = q["price"]
-                    prev    = q.get("prev", p)
-                    chg     = q.get("change", p - prev)
-                    pct     = q.get("changePct", chg / prev * 100 if prev else 0)
+                    code = detect_currency(sym) or q.get("currency","USD") or "USD"
+                    cs   = CSYMS.get(code,"$")
+                    p    = q["price"]
+                    prev = q.get("prev", p)
+                    chg  = q.get("change", p-prev)
+                    pct  = q.get("changePct", chg/prev*100 if prev else 0)
                     now_utc = int(datetime.now(timezone.utc).timestamp())
                     data = {
-                        "price":     round(p, 2),
-                        "change":    round(chg, 2),
-                        "changePct": round(pct, 4),
-                        "display":   fmt_price(cs, p),
-                        "high":      round(q.get("high", p), 2),
-                        "low":       round(q.get("low",  p), 2),
-                        "open":      round(q.get("open", p), 2),
-                        "prev":      round(prev, 2),
-                        "bid":       round(q.get("bid",  p), 2),
-                        "ask":       round(q.get("ask",  p), 2),
+                        "price":     round(p,2),
+                        "change":    round(chg,2),
+                        "changePct": round(pct,4),
+                        "display":   fmt_price(cs,p),
+                        "high":      round(q.get("high",p),2),
+                        "low":       round(q.get("low",p),2),
+                        "open":      round(q.get("open",p),2),
+                        "prev":      round(prev,2),
+                        "bid":       round(q.get("bid",p),2),
+                        "ask":       round(q.get("ask",p),2),
                         "currency":  code, "symbol": cs,
-                        "marketState": q.get("marketState", ""),
+                        "marketState": q.get("marketState",""),
                         "serverUtc": now_utc,
                         "candleUpdate": {
                             "time":  now_utc,
-                            "close": round(p, 2),
-                            "high":  round(q.get("high", p), 2),
-                            "low":   round(q.get("low",  p), 2),
-                            "open":  round(q.get("open", p), 2),
+                            "close": round(p,2),
+                            "high":  round(q.get("high",p),2),
+                            "low":   round(q.get("low",p),2),
+                            "open":  round(q.get("open",p),2),
                         }
                     }
                     _last_price_val[sym] = data
@@ -375,14 +353,14 @@ def _live_poller():
 threading.Thread(target=_live_poller, daemon=True).start()
 
 # ══════════════════════════════════════════════════════════════════
-# CACHE
+# CACHE  (used for non-SSE endpoints)
 # ══════════════════════════════════════════════════════════════════
 _price_cache = {}; _cache_ttl = 3; _cache_lock = threading.Lock()
 
 def _cache_get(sym):
     with _cache_lock:
         e = _price_cache.get(sym)
-        if e and (time.time() - e[0]) < _cache_ttl: return dict(e[1])
+        if e and (time.time()-e[0]) < _cache_ttl: return dict(e[1])
     return None
 
 def _cache_set(sym, data):
@@ -400,7 +378,7 @@ def detect_currency(sym):
     if any(x in s for x in ["^NSEI","^BSESN","^NSE","^CNX","NIFTY","SENSEX",
                              "NIFTY_","INDIA_VIX","^INDIAVIX"]): return "INR"
     if s.endswith("=F") or s.endswith("-USD") or s.endswith("=X"): return "USD"
-    if s.endswith(".L"):  return "GBP"
+    if s.endswith(".L"): return "GBP"
     if s.endswith(".PA") or s.endswith(".DE"): return "EUR"
     if s.endswith(".HK"): return "HKD"
     if s.endswith(".T"):  return "JPY"
@@ -408,21 +386,21 @@ def detect_currency(sym):
 
 def safe(v):
     try:
-        f = float(v); return None if (np.isnan(f) or np.isinf(f)) else round(f, 4)
+        f = float(v); return None if (np.isnan(f) or np.isinf(f)) else round(f,4)
     except: return None
 
 def fmt_inr(p):
-    v = float(p); s = f"{v:.2f}".split("."); n, d = s[0], s[1]
-    if len(n) > 3:
-        l3 = n[-3:]; rest = n[:-3]; g = []
-        while len(rest) > 2: g.insert(0, rest[-2:]); rest = rest[:-2]
-        if rest: g.insert(0, rest)
-        n = ",".join(g) + "," + l3
+    v=float(p); s=f"{v:.2f}".split("."); n,d=s[0],s[1]
+    if len(n)>3:
+        l3=n[-3:]; rest=n[:-3]; g=[]
+        while len(rest)>2: g.insert(0,rest[-2:]); rest=rest[:-2]
+        if rest: g.insert(0,rest)
+        n=",".join(g)+","+l3
     return f"₹{n}.{d}"
 
-def fmt_price(cs, p):
+def fmt_price(cs,p):
     if p is None: return "—"
-    return fmt_inr(float(p)) if cs == "₹" else f"{cs}{float(p):,.2f}"
+    return fmt_inr(float(p)) if cs=="₹" else f"{cs}{float(p):,.2f}"
 
 # ══════════════════════════════════════════════════════════════════
 # INDICES MAP
@@ -452,11 +430,14 @@ TV_IDX = {
     "USDINR=X":"FX_IDC:USDINR",
 }
 
+# Common stock symbol map for instant lookup without yfinance.Search
 _QUICK_SYMS = {
+    # NSE Indices
     "nifty":"^NSEI","nifty 50":"^NSEI","nifty50":"^NSEI",
     "bank nifty":"^NSEBANK","banknifty":"^NSEBANK","nifty bank":"^NSEBANK",
     "sensex":"^BSESN","bse sensex":"^BSESN",
     "india vix":"^INDIAVIX","indiavix":"^INDIAVIX","vix":"^INDIAVIX",
+    # NSE Top stocks (direct symbol, no search needed)
     "tcs":"TCS.NS","reliance":"RELIANCE.NS","infosys":"INFY.NS","infy":"INFY.NS",
     "hdfc bank":"HDFCBANK.NS","hdfcbank":"HDFCBANK.NS","hdfc":"HDFCBANK.NS",
     "icici bank":"ICICIBANK.NS","icicibank":"ICICIBANK.NS","icici":"ICICIBANK.NS",
@@ -474,6 +455,7 @@ _QUICK_SYMS = {
     "ongc":"ONGC.NS","ntpc":"NTPC.NS","tata steel":"TATASTEEL.NS",
     "divi":"DIVISLAB.NS","divis":"DIVISLAB.NS",
     "bajaj finserv":"BAJAJFINSV.NS","hul":"HINDUNILVR.NS","nestle":"NESTLEIND.NS",
+    # Global
     "apple":"AAPL","tesla":"TSLA","microsoft":"MSFT","nvidia":"NVDA",
     "google":"GOOGL","amazon":"AMZN","meta":"META","netflix":"NFLX",
     "amd":"AMD","intel":"INTC",
@@ -484,64 +466,72 @@ _QUICK_SYMS = {
 
 def find_symbol(company):
     q = company.strip().lower()
+    # 1. Check quick map first (instant, no API call)
     if q in _QUICK_SYMS:
         ys = _QUICK_SYMS[q]
         return TV_IDX.get(ys, ys.replace(".NS","").replace(".BO","")), ys
+    # 2. Check IDX map
     if q in IDX:
-        ys = IDX[q]; return TV_IDX.get(ys, ys), ys
-    for k, ys in IDX.items():
-        if q in k or k in q: return TV_IDX.get(ys, ys), ys
-    qu = company.strip().upper()
+        ys=IDX[q]; return TV_IDX.get(ys,ys),ys
+    for k,ys in IDX.items():
+        if q in k or k in q: return TV_IDX.get(ys,ys),ys
+    # 3. Direct symbol (uppercase) — handles TCS.NS, AAPL, ^NSEI etc
+    qu=company.strip().upper()
     if qu.endswith(".NS") or qu.endswith(".BO"):
         tv = ("NSE:" if qu.endswith(".NS") else "BSE:") + qu.split(".")[0]
         return tv, qu
     if qu.startswith("^") or "=F" in qu or "=X" in qu or "-USD" in qu:
-        return TV_IDX.get(qu, qu), qu
-    for k, ys in _QUICK_SYMS.items():
+        return TV_IDX.get(qu,qu),qu
+    # 4. Partial match in quick map
+    for k,ys in _QUICK_SYMS.items():
         if q in k or k.startswith(q):
             return TV_IDX.get(ys, ys.replace(".NS","").replace(".BO","")), ys
+    # 5. yfinance Search (fallback)
     try:
-        with _yf_sem: s = yf.Search(company, session=_get_session())
-        if not s.quotes: return None, None
-        q2 = s.quotes[0]; ys = q2["symbol"]; ex = q2.get("exchange","")
-        if   ys.endswith(".NS") or ex in ("NSE","NSI"): tv = "NSE:" + ys.replace(".NS","")
-        elif ys.endswith(".BO") or ex in ("BSE","BOM"): tv = "BSE:" + ys.replace(".BO","")
-        elif ex == "NASDAQ": tv = "NASDAQ:" + ys
-        elif ex == "NYSE":   tv = "NYSE:"   + ys
-        else:                tv = ys
-        return tv, ys
-    except: return None, None
+        with _yf_sem: s=yf.Search(company,session=_get_session())
+        if not s.quotes: return None,None
+        q2=s.quotes[0]; ys=q2["symbol"]; ex=q2.get("exchange","")
+        if   ys.endswith(".NS") or ex in ("NSE","NSI"): tv="NSE:"+ys.replace(".NS","")
+        elif ys.endswith(".BO") or ex in ("BSE","BOM"): tv="BSE:"+ys.replace(".BO","")
+        elif ex=="NASDAQ": tv="NASDAQ:"+ys
+        elif ex=="NYSE":   tv="NYSE:"+ys
+        else:              tv=ys
+        return tv,ys
+    except: return None,None
 
 @app.route("/autocomplete")
 def autocomplete():
-    q = request.args.get("q","").strip().lower()
+    q=request.args.get("q","").strip().lower()
     if not q: return jsonify([])
-    out = []
-    for k, ys in _QUICK_SYMS.items():
+    out=[]
+    # Quick map matches
+    for k,ys in _QUICK_SYMS.items():
         if q in k:
-            isIdx = ys.startswith("^") or "=F" in ys or "-USD" in ys
-            ex = "INDEX" if isIdx else ("NSE" if ys.endswith(".NS") else "BSE" if ys.endswith(".BO") else "GLOBAL")
-            if not any(o["symbol"] == ys for o in out):
-                out.append({"symbol":ys,"name":k.title(),"exchange":ex,"isIndex":isIdx})
-        if len(out) >= 4: break
-    for k, ys in IDX.items():
-        if q in k.lower() and not any(o["symbol"] == ys for o in out):
+            isIdx=ys.startswith("^") or "=F" in ys or "-USD" in ys
+            ex="INDEX" if isIdx else ("NSE" if ys.endswith(".NS") else "BSE" if ys.endswith(".BO") else "GLOBAL")
+            n=k.title()
+            if not any(o["symbol"]==ys for o in out):
+                out.append({"symbol":ys,"name":n,"exchange":ex,"isIndex":isIdx})
+        if len(out)>=4: break
+    # IDX map
+    for k,ys in IDX.items():
+        if q in k.lower() and not any(o["symbol"]==ys for o in out):
             out.append({"symbol":ys,"name":k.title(),"exchange":"INDEX","isIndex":True})
-        if len(out) >= 5: break
-    if len(q) >= 2:
+        if len(out)>=5: break
+    if len(q)>=2:
         try:
-            with _yf_sem: s = yf.Search(q, max_results=8, session=_get_session())
+            with _yf_sem: s=yf.Search(q,max_results=8,session=_get_session())
             for r in (s.quotes or [])[:8]:
-                sym  = r.get("symbol","")
-                name = r.get("shortname") or r.get("longname") or sym
-                ex   = r.get("exchange","")
-                if sym and not any(o["symbol"] == sym for o in out):
-                    out.append({"symbol":sym,"name":name,"exchange":ex,"isIndex":sym.startswith("^")})
+                sym=r.get("symbol",""); name=r.get("shortname") or r.get("longname") or sym
+                ex=r.get("exchange","")
+                if sym and not any(o["symbol"]==sym for o in out):
+                    isIdx=sym.startswith("^")
+                    out.append({"symbol":sym,"name":name,"exchange":ex,"isIndex":isIdx})
         except: pass
     return jsonify(out[:10])
 
 # ══════════════════════════════════════════════════════════════════
-# /price
+# /price  — one-shot REST endpoint (uses v7 → v8 → yfinance)
 # ══════════════════════════════════════════════════════════════════
 @app.route("/price")
 def price():
@@ -552,11 +542,12 @@ def price():
     if not sym: return jsonify(na)
 
     cached = _cache_get(sym)
-    if cached: cached["serverUtc"] = now_utc; return jsonify(cached)
+    if cached: cached["serverUtc"]=now_utc; return jsonify(cached)
 
-    code = detect_currency(sym) or "USD"; cs = CSYMS.get(code, "$")
-    p = hi = lo = op = prev = chg = pct = None
+    code=detect_currency(sym) or "USD"; cs=CSYMS.get(code,"$")
+    p=hi=lo=op=prev=chg=pct=None
 
+    # ── v7 /quote (fastest, matches Yahoo live price) ────────────
     q7 = _v7_quote(sym)
     if q7:
         p=q7["price"]; hi=q7["high"]; lo=q7["low"]; op=q7["open"]; prev=q7["prev"]
@@ -564,48 +555,53 @@ def price():
         if q7.get("currency") and q7["currency"] in CSYMS:
             code=q7["currency"]; cs=CSYMS[code]
 
+    # ── v8 chart fallback ────────────────────────────────────────
     if p is None:
-        q8 = _v8_price(sym)
+        q8=_v8_price(sym)
         if q8:
             p=q8["price"]; hi=q8["high"]; lo=q8["low"]; op=q8["open"]; prev=q8["prev"]
             chg=q8["change"]; pct=q8["changePct"]
             if q8.get("currency") and q8["currency"] in CSYMS:
                 code=q8["currency"]; cs=CSYMS[code]
 
+    # ── yfinance fast_info fallback ──────────────────────────────
     if p is None:
         for cand in _cands(sym):
             try:
-                t = _ticker(cand); fi = t.fast_info
-                p = float(fi.last_price) if fi.last_price else None
+                t=_ticker(cand); fi=t.fast_info
+                p=float(fi.last_price) if fi.last_price else None
                 if p and not np.isnan(p):
                     hi=float(fi.day_high or p); lo=float(fi.day_low or p)
                     op=float(fi.open or p); prev=float(fi.previous_close or p)
                     chg=p-prev; pct=(chg/prev*100) if prev else 0
-                    cdet = detect_currency(cand)
+                    cdet=detect_currency(cand)
                     if not cdet:
-                        try: cdet = fi.currency
+                        try: cdet=fi.currency
                         except: pass
                     code=cdet or "USD"; cs=CSYMS.get(code,"$")
                     break
-            except: p = None; continue
+            except: p=None; continue
 
-    if p is None or (isinstance(p, float) and np.isnan(p)): return jsonify(na)
+    if p is None or (isinstance(p,float) and np.isnan(p)): return jsonify(na)
 
     hi=hi or p; lo=lo or p; op=op or p; prev=prev or p
-    if chg is None: chg = p - prev
-    if pct is None: pct = (chg / prev * 100) if prev else 0
+    if chg is None: chg=p-prev
+    if pct is None: pct=(chg/prev*100) if prev else 0
 
-    result = {
+    result={
         "price":round(p,2),"change":round(chg,2),"changePct":round(pct,4),
         "currency":code,"symbol":cs,"display":fmt_price(cs,p),
         "high":round(hi,2),"low":round(lo,2),"open":round(op,2),"prev":round(prev,2),
         "serverUtc":now_utc
     }
-    _cache_set(sym, result)
+    _cache_set(sym,result)
     return jsonify(result)
 
 # ══════════════════════════════════════════════════════════════════
-# /stream/price  — Server-Sent Events
+# /stream/price  — Server-Sent Events for live price streaming
+# Usage:  const es = new EventSource('/stream/price?symbol=^NSEI');
+#         es.onmessage = e => { const d = JSON.parse(e.data); ... }
+# Pushes an update whenever the price changes (polls every 2s).
 # ══════════════════════════════════════════════════════════════════
 @app.route("/stream/price")
 def stream_price():
@@ -615,10 +611,12 @@ def stream_price():
 
     def generate():
         q = _subscribe(sym)
+        # Send immediately from cache / last known value
         last = _last_price_val.get(sym)
         if last:
             yield f"data: {json.dumps(last)}\n\n"
         else:
+            # Fire an immediate fetch so first message arrives fast
             threading.Thread(target=lambda: _v7_quote(sym), daemon=True).start()
         try:
             while True:
@@ -626,7 +624,7 @@ def stream_price():
                     data = q.get(timeout=30)
                     yield f"data: {json.dumps(data)}\n\n"
                 except queue.Empty:
-                    yield ": heartbeat\n\n"
+                    yield ": heartbeat\n\n"   # keep connection alive
         except GeneratorExit:
             pass
         finally:
@@ -640,33 +638,32 @@ def stream_price():
 # ══════════════════════════════════════════════════════════════════
 @app.route("/ohlc")
 def ohlc():
-    sym      = request.args.get("symbol","").strip()
-    period   = request.args.get("period","6mo")
-    interval = request.args.get("interval","1d")
+    sym=request.args.get("symbol","").strip()
+    period=request.args.get("period","6mo")
+    interval=request.args.get("interval","1d")
     if not sym: return jsonify({"error":"No symbol"})
-    SECS = {"1m":60,"2m":120,"5m":300,"15m":900,"30m":1800,
-            "60m":3600,"1h":3600,"1d":86400,"1wk":604800}
+    SECS={"1m":60,"2m":120,"5m":300,"15m":900,"30m":1800,"60m":3600,"1h":3600,"1d":86400,"1wk":604800}
     try:
-        code = detect_currency(sym) or "USD"; cs2 = CSYMS.get(code,"$")
-        df   = _history(sym, period, interval)
+        code=detect_currency(sym) or "USD"; cs2=CSYMS.get(code,"$")
+        df=_history(sym,period,interval)
         if df.empty: return jsonify({"error":f"No chart data for {sym}."})
-        is_daily = interval in ("1d","1wk","1mo")
-        rows = []
-        for ts, row in df.iterrows():
+        is_daily=interval in ("1d","1wk","1mo")
+        rows=[]
+        for ts,row in df.iterrows():
             o=safe(row.get("Open")); h=safe(row.get("High"))
             l=safe(row.get("Low"));  c=safe(row.get("Close"))
-            try:   v = int(row.get("Volume",0) or 0)
-            except: v = 0
+            try:   v=int(row.get("Volume",0) or 0)
+            except: v=0
             if not (o and h and l and c): continue
             if is_daily:
-                time_val = str(ts)[:10]
+                time_val=str(ts)[:10]
             else:
                 try:
-                    utc_unix = int(ts.tz_convert("UTC").timestamp()) if (hasattr(ts,"tzinfo") and ts.tzinfo) else int(pd.Timestamp(ts,tz="UTC").timestamp())
-                except: utc_unix = int(pd.Timestamp(ts).timestamp())
-                time_val = utc_unix
+                    utc_unix=int(ts.tz_convert("UTC").timestamp()) if (hasattr(ts,"tzinfo") and ts.tzinfo) else int(pd.Timestamp(ts,tz="UTC").timestamp())
+                except: utc_unix=int(pd.Timestamp(ts).timestamp())
+                time_val=utc_unix
             rows.append({"time":time_val,"open":o,"high":h,"low":l,"close":c,"volume":v})
-        seen = set(); unique = []
+        seen=set(); unique=[]
         for r in rows:
             if r["time"] not in seen: seen.add(r["time"]); unique.append(r)
         if not unique: return jsonify({"error":f"No valid candles for {sym}"})
@@ -680,7 +677,7 @@ def ohlc():
 # ══════════════════════════════════════════════════════════════════
 @app.route("/indicators")
 def indicators():
-    sym = request.args.get("symbol","").strip()
+    sym=request.args.get("symbol","").strip()
     if not sym: return jsonify({"error":"No symbol"})
     try:
         code=detect_currency(sym) or "USD"; cs2=CSYMS.get(code,"$")
@@ -810,10 +807,14 @@ def predict():
         vol_r=float(v.iloc[-1])/avg_v if avg_v>0 else 1
         pts=[]; signals=[]
         def add(pt,ic,tx): pts.append(pt); signals.append({"icon":ic,"text":tx})
+
+        # ── Lagging trend indicators ──────────────────────────────
         if e9>e21_v:  add(2,"✅","EMA9 > EMA21 — Bullish cross")
         else:         add(-2,"🔴","EMA9 < EMA21 — Bearish cross")
         if cur>e50_v: add(1,"✅",f"Above EMA50 ({fmt_price(cs2,e50_v)})")
         else:         add(-1,"🔴",f"Below EMA50 ({fmt_price(cs2,e50_v)})")
+
+        # ── RSI — momentum oscillator ─────────────────────────────
         if r<25:      add(4,"✅",f"RSI {r:.1f} — Extreme Oversold ⚡")
         elif r<35:    add(3,"✅",f"RSI {r:.1f} — Oversold")
         elif r>80:    add(-4,"🔴",f"RSI {r:.1f} — Extreme Overbought ⚠️")
@@ -821,64 +822,92 @@ def predict():
         elif r>55:    add(1,"🟡",f"RSI {r:.1f} — Bullish zone")
         elif r<45:    add(-1,"🟡",f"RSI {r:.1f} — Bearish zone")
         else:         add(0,"⚪",f"RSI {r:.1f} — Neutral")
+
+        # ── Bollinger Band position ───────────────────────────────
         if bp<0.15:   add(3,"✅","Near lower BB — Strong buy zone")
         elif bp<0.25: add(1,"✅","Lower BB zone — Buy bias")
         elif bp>0.85: add(-3,"🔴","Near upper BB — Strong sell zone")
         elif bp>0.75: add(-1,"🔴","Upper BB zone — Sell bias")
         else:         add(0,"⚪",f"BB position {bp*100:.0f}%")
+
+        # ── Stochastic ────────────────────────────────────────────
         if k<20:      add(2,"✅",f"Stoch {k:.1f} — Oversold")
         elif k>80:    add(-2,"🔴",f"Stoch {k:.1f} — Overbought")
         else:         add(0,"⚪",f"Stoch {k:.1f}")
+
+        # ── MACD — trend + histogram velocity ────────────────────
         if macdv>msigv: add(1,"✅","MACD above signal line")
         else:           add(-1,"🔴","MACD below signal line")
+        # MACD histogram velocity (is momentum increasing or decreasing)
         try:
-            hist_now=float(macd.iloc[-1])-float(msig.iloc[-1])
-            hist_prev=float(macd.iloc[-2])-float(msig.iloc[-2])
-            hist_vel=hist_now-hist_prev
-            if hist_vel>atrv*0.05:   add(2,"📈","MACD histogram accelerating up")
-            elif hist_vel<-atrv*0.05: add(-2,"📉","MACD histogram accelerating down")
+            hist_now  = float(macd.iloc[-1]) - float(msig.iloc[-1])
+            hist_prev = float(macd.iloc[-2]) - float(msig.iloc[-2])
+            hist_vel  = hist_now - hist_prev
+            if hist_vel > atrv * 0.05:
+                add(2,"📈","MACD histogram accelerating up")
+            elif hist_vel < -atrv * 0.05:
+                add(-2,"📉","MACD histogram accelerating down")
         except: pass
+
+        # ── Supertrend ────────────────────────────────────────────
         if cur>stv:   add(2,"✅","Above Supertrend — BUY signal")
         else:         add(-2,"🔴","Below Supertrend — SELL signal")
+
+        # ── Volume confirmation ───────────────────────────────────
         if vol_r>2.0: add(2 if sum(pts)>0 else -2,"📊",f"Strong volume {vol_r:.1f}× avg")
         elif vol_r>1.4: add(1 if sum(pts)>0 else -1,"📊",f"Volume spike {vol_r:.1f}× avg")
+
+        # ── Price Rate of Change (ROC) — THE KEY MOMENTUM SIGNAL ─
+        # This is what makes prediction match volatile markets.
+        # We look at price change over last 1, 3, and 5 bars.
         try:
-            roc1=(float(c.iloc[-1])-float(c.iloc[-2]))/(float(c.iloc[-2])+1e-9)*100
-            roc3=(float(c.iloc[-1])-float(c.iloc[-4]))/(float(c.iloc[-4])+1e-9)*100 if len(c)>=4 else 0
-            roc5=(float(c.iloc[-1])-float(c.iloc[-6]))/(float(c.iloc[-6])+1e-9)*100 if len(c)>=6 else 0
-            if roc1>0.5:    add(3,"🚀",f"Price up {roc1:.2f}% last bar")
-            elif roc1>0.2:  add(1,"📈",f"Price up {roc1:.2f}% last bar")
-            elif roc1<-0.5: add(-3,"💥",f"Price down {roc1:.2f}% last bar")
-            elif roc1<-0.2: add(-1,"📉",f"Price down {roc1:.2f}% last bar")
-            if roc3>1.0:    add(2,"📈",f"3-bar momentum +{roc3:.2f}%")
-            elif roc3<-1.0: add(-2,"📉",f"3-bar momentum {roc3:.2f}%")
-            mom_str=f"+{roc5:.2f}%" if roc5>=0 else f"{roc5:.2f}%"
+            roc1  = (float(c.iloc[-1]) - float(c.iloc[-2])) / (float(c.iloc[-2])+1e-9) * 100
+            roc3  = (float(c.iloc[-1]) - float(c.iloc[-4])) / (float(c.iloc[-4])+1e-9) * 100 if len(c)>=4 else 0
+            roc5  = (float(c.iloc[-1]) - float(c.iloc[-6])) / (float(c.iloc[-6])+1e-9) * 100 if len(c)>=6 else 0
+            # Strong directional ROC overrides lagging indicators
+            if roc1 > 0.5:   add(3,"🚀",f"Price up {roc1:.2f}% last bar")
+            elif roc1 > 0.2: add(1,"📈",f"Price up {roc1:.2f}% last bar")
+            elif roc1 < -0.5: add(-3,"💥",f"Price down {roc1:.2f}% last bar")
+            elif roc1 < -0.2: add(-1,"📉",f"Price down {roc1:.2f}% last bar")
+            if roc3 > 1.0:   add(2,"📈",f"3-bar momentum +{roc3:.2f}%")
+            elif roc3 < -1.0: add(-2,"📉",f"3-bar momentum {roc3:.2f}%")
+            mom_str = f"+{roc5:.2f}%" if roc5>=0 else f"{roc5:.2f}%"
             add(2 if roc5>0 else -2 if roc5<0 else 0,
                 "✅" if roc5>0 else "🔴" if roc5<0 else "⚪",
                 f"5-bar momentum {mom_str}")
         except: pass
+
+        # ── Candle body direction (last 3 bars) ───────────────────
+        # Count bullish vs bearish candles in recent bars
         try:
-            bull_bars=sum(1 for i in range(-3,0) if float(c.iloc[i])>float(c.iloc[i-1]))
-            bear_bars=3-bull_bars
-            if bull_bars>=3:   add(2,"🕯️","3 consecutive bullish candles")
-            elif bear_bars>=3: add(-2,"🕯️","3 consecutive bearish candles")
-            elif bull_bars==2: add(1,"🕯️","Mostly bullish candles")
-            elif bear_bars==2: add(-1,"🕯️","Mostly bearish candles")
+            bull_bars = sum(1 for i in range(-3,0) if float(c.iloc[i])>float(c.iloc[i-1]))
+            bear_bars = 3 - bull_bars
+            if bull_bars >= 3:    add(2,"🕯️","3 consecutive bullish candles")
+            elif bear_bars >= 3:  add(-2,"🕯️","3 consecutive bearish candles")
+            elif bull_bars == 2:  add(1,"🕯️","Mostly bullish candles")
+            elif bear_bars == 2:  add(-1,"🕯️","Mostly bearish candles")
         except: pass
+
+        # ── Price vs VWAP ─────────────────────────────────────────
         try:
             typ2=(h+lo+c)/3
             vwap_val=float((typ2*v).rolling(min(20,len(c))).sum().iloc[-1] /
                            (v.rolling(min(20,len(c))).sum().iloc[-1]+1e-9))
-            if cur>vwap_val*1.001:   add(1,"✅",f"Above VWAP {fmt_price(cs2,vwap_val)}")
-            elif cur<vwap_val*0.999: add(-1,"🔴",f"Below VWAP {fmt_price(cs2,vwap_val)}")
+            if cur > vwap_val * 1.001:  add(1,"✅",f"Above VWAP {fmt_price(cs2,vwap_val)}")
+            elif cur < vwap_val * 0.999: add(-1,"🔴",f"Below VWAP {fmt_price(cs2,vwap_val)}")
         except: pass
-        raw_score=sum(pts)
-        score=max(-10,min(10,raw_score*10/15))
-        score=round(score,1)
+
+        # ── Final score with ROC dominance ───────────────────────
+        # Normalise: raw score can be large due to more signals
+        raw_score = sum(pts)
+        # Cap to [-15, 15] then remap to [-10, 10]
+        score = max(-10, min(10, raw_score * 10 / 15))
+        score = round(score, 1)
+
         if score>=2.5:    direction,color="BULLISH","#00C48C"
         elif score<=-2.5: direction,color="BEARISH","#E05555"
         else:             direction,color="SIDEWAYS","#F0A82A"
-        conf=round(min(95,abs(score)/10*100+20),1)
+        conf=round(min(95,abs(score)/10*100+20),1)  # min 20% confidence
         entry=round(cur,2)
         if direction=="BULLISH":
             sl=round(cur-atrv,2); t1=round(cur+atrv*.5,2); t2=round(cur+atrv,2)
@@ -1048,38 +1077,123 @@ def optionchain():
 # ══════════════════════════════════════════════════════════════════
 # NEWS
 # ══════════════════════════════════════════════════════════════════
+import xml.etree.ElementTree as _ET
+import re as _re
+
+_RSS_FEEDS = [
+    ("Economic Times",   "https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms"),
+    ("ET Economy",       "https://economictimes.indiatimes.com/economy/rssfeeds/1373380680.cms"),
+    ("Moneycontrol",     "https://www.moneycontrol.com/rss/marketreports.xml"),
+    ("Moneycontrol News","https://www.moneycontrol.com/rss/latestnews.xml"),
+    ("LiveMint Markets", "https://www.livemint.com/rss/markets"),
+    ("Business Standard","https://www.business-standard.com/rss/markets-106.rss"),
+    ("Reuters Business", "https://feeds.reuters.com/reuters/businessNews"),
+    ("CNBC Markets",     "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=20910258"),
+    ("Yahoo Finance",    "https://finance.yahoo.com/news/rssindex"),
+]
+
+_news_cache    = []
+_news_cache_ts = 0.0
+_NEWS_TTL      = 600
+
+def _fetch_rss(url, src_name, seen):
+    out = []
+    try:
+        resp = requests.get(url, timeout=8, headers={"User-Agent":"Mozilla/5.0"})
+        if resp.status_code != 200: return out
+        root = _ET.fromstring(resp.content)
+        ns   = {"atom":"http://www.w3.org/2005/Atom"}
+        items = root.findall(".//item") or root.findall(".//atom:entry", ns)
+        for item in items[:8]:
+            def _t(tag):
+                el = item.find(tag)
+                return el.text.strip() if el is not None and el.text else ""
+            title = _t("title") or _t("atom:title")
+            link  = _t("link")  or _t("atom:link") or (item.find("link") or _ET.Element("x")).get("href","")
+            pub   = _t("pubDate") or _t("published") or ""
+            title = _re.sub(r"<[^>]+>","",title).strip()
+            if not title or not link or link in seen: continue
+            seen.add(link)
+            thumb = ""
+            for mc in item.findall(".//{http://search.yahoo.com/mrss/}content"):
+                thumb = mc.get("url",""); break
+            if not thumb:
+                enc = item.find("enclosure")
+                if enc is not None: thumb = enc.get("url","")
+            try:
+                from email.utils import parsedate_to_datetime
+                pub = str(parsedate_to_datetime(pub).date()) if pub else ""
+            except: pub = pub[:10] if pub else ""
+            out.append({"title":title,"url":link,"source":src_name,"pubDate":pub,"thumbnail":thumb})
+    except: pass
+    return out
+
+def _get_rss_news():
+    global _news_cache, _news_cache_ts
+    if _news_cache and (time.time()-_news_cache_ts) < _NEWS_TTL:
+        return list(_news_cache)
+    seen = set(); out = []
+    for src_name, url in _RSS_FEEDS:
+        if len(out) >= 30: break
+        items = _fetch_rss(url, src_name, seen)
+        out.extend(items)
+        if items: time.sleep(0.1)
+    if out:
+        _news_cache = out[:30]
+        _news_cache_ts = time.time()
+    return out[:30]
+
+def _parse_yf(items):
+    out=[]
+    for n in (items or [])[:15]:
+        ct=n.get("content",{}) if isinstance(n.get("content"),dict) else {}
+        title=ct.get("title") or n.get("title","")
+        url=(ct.get("canonicalUrl") or {}).get("url","") or n.get("link","")
+        src2=(ct.get("provider") or {}).get("displayName","") or n.get("publisher","Yahoo Finance")
+        pub=ct.get("pubDate","") or str(n.get("providerPublishTime",""))[:10]
+        thumb=""
+        for res in (ct.get("thumbnail") or {}).get("resolutions",[]): thumb=res.get("url",""); break
+        if title and url: out.append({"title":title,"url":url,"source":src2,"pubDate":str(pub)[:10],"thumbnail":thumb})
+    return out
+
 @app.route("/news")
 def news_api():
-    sym=request.args.get("symbol","RELIANCE.NS").strip() or "RELIANCE.NS"
-    def _parse(items):
-        out=[]
-        for n in (items or [])[:20]:
-            ct=n.get("content",{}) if isinstance(n.get("content"),dict) else {}
-            title=ct.get("title") or n.get("title","")
-            url=(ct.get("canonicalUrl") or {}).get("url","") or n.get("link","")
-            src2=(ct.get("provider") or {}).get("displayName","") or n.get("publisher","Yahoo Finance")
-            pub=ct.get("pubDate","") or str(n.get("providerPublishTime",""))[:10]
-            thumb=""
-            for res in (ct.get("thumbnail") or {}).get("resolutions",[]): thumb=res.get("url",""); break
-            if title and url: out.append({"title":title,"url":url,"source":src2,"pubDate":str(pub)[:10],"thumbnail":thumb})
-        return out
-    try:
-        out=_parse(_ticker(sym).news)
-        seen={x["url"] for x in out}
-        for gs in ["^GSPC","^NSEI","GC=F","CL=F","BTC-USD","AAPL"]:
-            if len(out)>=18: break
-            try:
-                for item in _parse(_ticker(gs).news):
-                    if item["url"] not in seen: out.append(item); seen.add(item["url"])
-            except: pass
-        return jsonify(out[:20])
-    except: return jsonify([])
+    sym = request.args.get("symbol","").strip()
+    out = []; seen = set()
+    # 1. yfinance news for symbol
+    if sym:
+        try:
+            for item in _parse_yf(_ticker(sym).news):
+                if item["url"] not in seen: out.append(item); seen.add(item["url"])
+        except: pass
+    # 2. yfinance news for major symbols
+    for gs in ["^NSEI","^GSPC","GC=F","CL=F","BTC-USD","RELIANCE.NS"]:
+        if len(out) >= 12: break
+        try:
+            for item in _parse_yf(_ticker(gs).news):
+                if item["url"] not in seen: out.append(item); seen.add(item["url"])
+        except: pass
+    # 3. RSS feeds fill remaining slots (always works, no IP block)
+    for item in _get_rss_news():
+        if len(out) >= 25: break
+        if item["url"] not in seen: out.append(item); seen.add(item["url"])
+    # 4. Force RSS if still empty
+    if not out:
+        global _news_cache_ts
+        _news_cache_ts = 0
+        out = _get_rss_news()
+    return jsonify(out[:25])
 
-# ══════════════════════════════════════════════════════════════════
-# AI CHAT
-# ══════════════════════════════════════════════════════════════════
+@app.route("/news/market")
+def market_news():
+    global _news_cache_ts
+    if request.args.get("refresh","0") == "1": _news_cache_ts = 0
+    return jsonify(_get_rss_news())
+
+
 @app.route("/api/chat", methods=["POST"])
 def api_chat():
+    import os
     api_key = os.environ.get("ANTHROPIC_API_KEY","")
     if not api_key:
         try:
