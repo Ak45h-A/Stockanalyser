@@ -524,6 +524,32 @@ html,body{height:100%;font-family:var(--font);background:var(--bg0);color:var(--
 @media(max-width:1000px){.body{grid-template-columns:44px 180px minmax(0,1fr) 260px}.rpanel{width:260px!important;min-width:260px!important;max-width:260px!important}}
 @media(max-width:780px){.body{grid-template-columns:0 0 minmax(0,1fr) 220px}.sidebar,.inav{display:none!important}.rpanel{width:220px!important;min-width:220px!important;max-width:220px!important}}
 
+/* ── PHONE: stack chart above rpanel ── */
+@media(max-width:600px){
+  html,body{overflow:auto!important}
+  .app{display:flex;flex-direction:column;height:auto!important;min-height:100vh}
+  .body{display:flex;flex-direction:column;height:auto!important;overflow:visible!important}
+  .sidebar,.inav{display:none!important}
+  .main{max-width:100vw!important;width:100%!important;height:60vw!important;min-height:280px;clip-path:none!important}
+  .rpanel{width:100%!important;min-width:100%!important;max-width:100%!important;border-left:none!important;border-top:1px solid var(--bd);height:auto!important;max-height:none!important;overflow-y:visible!important}
+  .rp-z1{max-height:none!important}
+  .rp-z2{max-height:200px}
+  .rp-z3{overflow-y:visible!important;flex:none!important}
+  .topbar{padding:0 8px!important;gap:6px!important}
+  .belt{display:none!important}
+  .chart-hdr{flex-wrap:wrap!important;height:auto!important;padding:4px!important;gap:2px!important}
+  .tabs{max-width:100%!important;overflow-x:auto!important}
+  .tfs{max-width:100%!important;overflow-x:auto!important}
+  .ohlc-bar{display:none!important}
+  .draw-bar{display:none!important}
+  #lwc-main{height:220px!important}
+  .vol-wrap{height:50px!important}
+  .action-bar{padding:0 6px!important}
+}
+@media(max-width:380px){
+  .tab{padding:4px 7px!important;font-size:11px!important}
+  .tf{padding:3px 6px!important;font-size:10px!important}
+}
 /* Light theme */
 body.lt{--bg0:#EFF3FB;--bg1:#FFFFFF;--bg2:#F5F8FE;--bg3:#E8EFF8;--bd:rgba(0,0,0,.09);--bd2:rgba(0,0,0,.17);--t1:#17243A;--t2:#4A5E78;--t3:#94A3B8}
 body.lt .topbar::after{opacity:.4}
