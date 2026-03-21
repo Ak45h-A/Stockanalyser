@@ -558,6 +558,14 @@ html,body{height:100%;font-family:var(--font);background:var(--bg0);color:var(--
 .mob-search input:focus{border-color:var(--g)}
 .mob-search input::placeholder{color:var(--t3)}
 .mob-search button{background:var(--g);border:none;border-radius:8px;padding:8px 12px;color:#000;font-weight:800;cursor:pointer;font-size:12px;white-space:nowrap;flex-shrink:0}
+/* Mobile suggestion dropdown */
+#mobSugg{position:fixed;left:0;right:0;background:var(--bg1);border-bottom:1px solid var(--bd2);z-index:9999;display:none;flex-direction:column;max-height:260px;overflow-y:auto;box-shadow:0 6px 20px rgba(0,0,0,.5)}
+#mobSugg .msi{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--bd);cursor:pointer;transition:.1s}
+#mobSugg .msi:last-child{border:none}
+#mobSugg .msi:active{background:var(--bg3)}
+#mobSugg .msi-name{font-size:13px;font-weight:700;color:var(--t1)}
+#mobSugg .msi-sym{font-size:10px;color:var(--t3);font-family:var(--mono);margin-top:1px}
+#mobSugg .msi-badge{font-size:9px;font-weight:800;padding:1px 6px;border-radius:4px;margin-left:auto;flex-shrink:0}
 
 /* ══ PHONE: full vertical stack ══ */
 @media(max-width:600px){
@@ -808,9 +816,12 @@ body.lt .topbar::after{opacity:.4}
 <div class="mob-search" id="mobSearch">
   <a href="/" style="width:34px;height:34px;flex-shrink:0;border:1px solid var(--bd2);background:var(--bg2);color:var(--t2);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;text-decoration:none">&#8592;</a>
   <input id="mobSi" type="text" placeholder="Search NIFTY, Reliance, Apple…" autocomplete="off"
-    onkeydown="if(event.key==='Enter'){document.getElementById('si').value=this.value;doSearch()}">
-  <button onclick="document.getElementById('si').value=document.getElementById('mobSi').value;doSearch()">Go</button>
+    oninput="mobAC(this.value)"
+    onkeydown="if(event.key==='Enter'){closeMobSugg();document.getElementById('si').value=this.value;doSearchVal(this.value)}">
+  <button onclick="closeMobSugg();document.getElementById('si').value=document.getElementById('mobSi').value;doSearchVal(document.getElementById('mobSi').value)">Go</button>
 </div>
+<!-- Mobile autocomplete suggestions -->
+<div id="mobSugg"></div>
 
 <div class="body">
 
@@ -2521,18 +2532,34 @@ const _STOCKS=[
   {s:"META",n:"Meta Platforms",k:"meta facebook"},{s:"NFLX",n:"Netflix",k:"netflix nflx"},
   {s:"AMD",n:"AMD",k:"amd"},{s:"INTC",n:"Intel",k:"intel intc"},
 ];
-function _localAC(q){
-  const ql=q.toLowerCase(),out=[];
-  for(const x of _STOCKS){
-    const sym=x.s.toLowerCase().replace(".ns","").replace(".bo","");
-    if(x.n.toLowerCase().includes(ql)||sym.includes(ql)||x.k.includes(ql)){
-      const isIdx=x.s.startsWith("^")||x.s.includes("=F")||x.s.includes("-USD")||x.s.includes("=X");
-      const ex=isIdx?"INDEX":x.s.endsWith(".NS")?"NSE":x.s.endsWith(".BO")?"BSE":"GLOBAL";
-      if(!out.find(o=>o.symbol===x.s))out.push({symbol:x.s,name:x.n,exchange:ex,isIndex:isIdx});
+/* Fuzzy score helper */
+function _fuzzyScore(target, q) {
+  const t = target.toLowerCase(), ql = q.toLowerCase();
+  if (t === ql) return 100;
+  if (t.startsWith(ql)) return 90;
+  if (t.includes(ql)) return 80;
+  const tokens = ql.split(' ').filter(Boolean);
+  if (tokens.length > 1 && tokens.every(tk => t.includes(tk))) return 75;
+  const chars = new Set(ql.split(''));
+  const overlap = [...chars].filter(c => t.includes(c)).length;
+  const score = Math.round((overlap / Math.max(chars.size, 1)) * 60);
+  return score >= 40 ? score : 0;
+}
+function _localAC(q) {
+  const ql = (q||'').toLowerCase().trim();
+  if (!ql) return [];
+  const scored = [];
+  for (const x of _STOCKS) {
+    const sym  = x.s.toLowerCase().replace('.ns','').replace('.bo','');
+    const best = Math.max(_fuzzyScore(x.n, ql), _fuzzyScore(sym, ql), _fuzzyScore(x.k, ql));
+    if (best >= 40) {
+      const isIdx = x.s.startsWith('^')||x.s.includes('=F')||x.s.includes('-USD')||x.s.includes('=X');
+      const ex = isIdx?'INDEX':x.s.endsWith('.NS')?'NSE':x.s.endsWith('.BO')?'BSE':'GLOBAL';
+      if (!scored.find(o=>o.symbol===x.s))
+        scored.push({symbol:x.s, name:x.n, exchange:ex, isIndex:isIdx, _score:best});
     }
-    if(out.length>=7)break;
   }
-  return out;
+  return scored.sort((a,b)=>b._score-a._score).slice(0,8);
 }
 function _hl(t,q){const i=t.toLowerCase().indexOf(q.toLowerCase());if(i<0)return t;return t.slice(0,i)+'<b style="color:var(--g)">'+t.slice(i,i+q.length)+'</b>'+t.slice(i+q.length);}
 function _showSugg(list,q){
@@ -2580,6 +2607,84 @@ function doSearch(){
   const i=document.createElement("input");i.type="hidden";i.name="company";i.value=v;
   f.appendChild(i);document.body.appendChild(f);f.submit();
 }
+
+/* ════ MOBILE AUTOCOMPLETE ════ */
+let _mobAcT = null;
+
+function mobAC(v) {
+  clearTimeout(_mobAcT);
+  v = (v||"").trim();
+  const box = document.getElementById("mobSugg");
+  if (!v) { if(box) box.style.display="none"; return; }
+
+  // Show local results immediately
+  const local = _localAC(v);
+  if (local.length) _showMobSugg(local, v);
+
+  // Then fetch remote suggestions
+  _mobAcT = setTimeout(async () => {
+    try {
+      const r = await fetch("/autocomplete?q="+encodeURIComponent(v)).then(x=>x.json());
+      if (r && r.length) {
+        // Merge: remote + local, dedupe by symbol
+        const seen = new Set(local.map(x=>x.symbol));
+        const merged = [...local];
+        for (const item of r) {
+          if (!seen.has(item.symbol)) { merged.push(item); seen.add(item.symbol); }
+        }
+        _showMobSugg(merged.slice(0,8), v);
+      }
+    } catch(e) {}
+  }, 250);
+}
+
+function _showMobSugg(list, q) {
+  const box = document.getElementById("mobSugg");
+  if (!box || !list.length) { if(box) box.style.display="none"; return; }
+  const ql = q.toLowerCase();
+
+  // Position below mob-search bar
+  const msr = document.getElementById("mobSearch");
+  if (msr) {
+    const rect = msr.getBoundingClientRect();
+    box.style.top = (rect.bottom) + "px";
+  }
+
+  box.innerHTML = list.map(r => {
+    const ic = r.isIndex ? "📊" : r.exchange==="NSE"||r.exchange==="BSE" ? "₹" : "🌐";
+    const badgeColor = r.isIndex?"var(--am)":r.exchange==="NSE"?"var(--g)":r.exchange==="BSE"?"#F59E0B":"var(--t3)";
+    // Highlight matching text
+    const nm = r.name; const nml = nm.toLowerCase();
+    const hi = nml.includes(ql) ? nm.slice(0,nml.indexOf(ql))+'<b style="color:var(--g)">'+nm.slice(nml.indexOf(ql),nml.indexOf(ql)+ql.length)+'</b>'+nm.slice(nml.indexOf(ql)+ql.length) : nm;
+    return `<div class="msi" ontouchstart="this.style.background='var(--bg3)'" ontouchend="this.style.background=''" onclick="mobPickSym('${r.symbol.replace(/'/g,"\'")}','${r.name.replace(/'/g,"\'")}')">
+      <span style="font-size:14px;width:20px;text-align:center;flex-shrink:0">${ic}</span>
+      <div style="flex:1;min-width:0">
+        <div class="msi-name">${hi}</div>
+        <div class="msi-sym">${r.symbol}</div>
+      </div>
+      <span class="msi-badge" style="background:${badgeColor}22;color:${badgeColor}">${r.exchange}</span>
+    </div>`;
+  }).join("");
+  box.style.display = "flex";
+}
+
+function mobPickSym(sym, name) {
+  closeMobSugg();
+  const inp = document.getElementById("mobSi");
+  if (inp) inp.value = name || sym;
+  document.getElementById("si").value = sym;
+  doSearchVal(sym);
+}
+
+function closeMobSugg() {
+  const box = document.getElementById("mobSugg");
+  if (box) box.style.display = "none";
+}
+
+// Close mobile suggestions when tapping outside
+document.addEventListener("click", e => {
+  if (!e.target.closest("#mobSearch") && !e.target.closest("#mobSugg")) closeMobSugg();
+});
 
 /* ════ VOICE ════ */
 function startVoice() {
