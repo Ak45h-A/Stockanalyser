@@ -50,6 +50,148 @@ a:hover { opacity: .8; }
 .green { color: #00B386; }
 .red   { color: #E04F4F; }
 .amber { color: #F0A020; }
+
 /* Dhan sidebar offset for non-index pages */
 body { margin-left: 0; }
 .page-wrap { margin-left: 54px !important; padding-top: 56px; }
+
+
+/* ══════════════════════════════════════════════════════════════
+   MOBILE RESPONSIVE
+   ══════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+
+  /* Remove sidebar offset on mobile */
+  body { margin-left: 0 !important; }
+  .page-wrap {
+    margin-left: 0 !important;
+    padding: 12px 10px !important;
+  }
+
+  /* Hide left sidebar */
+  .sidebar, #sidebar,
+  [class*="sidebar"],
+  .left-panel, #left-panel {
+    display: none !important;
+  }
+
+  /* Full width main area */
+  .main, #main,
+  .main-content, #main-content,
+  [class*="main-content"] {
+    margin-left: 0 !important;
+    width: 100% !important;
+    padding: 0 !important;
+  }
+
+  /* Stack all grid/flex layouts vertically */
+  .layout, .grid,
+  [class*="-layout"],
+  [class*="-grid"],
+  [class*="row"] {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 10px !important;
+  }
+
+  /* Full width for any panel or card */
+  .panel, .card,
+  [class*="panel"],
+  [class*="col-"] {
+    width: 100% !important;
+    min-width: unset !important;
+    max-width: 100% !important;
+  }
+
+  /* Chart container full width, fixed height */
+  #chart, .chart-wrap,
+  [id*="chart"],
+  [class*="chart-container"] {
+    width: 100% !important;
+    height: 260px !important;
+    min-height: 260px !important;
+  }
+
+  /* AI signal / predict panel full width */
+  [class*="signal"],
+  [class*="predict"],
+  [class*="ai-panel"] {
+    width: 100% !important;
+  }
+
+  /* Nav bar: scrollable links on small screens */
+  .nav {
+    padding: 0 10px !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+  }
+  .nav-links {
+    overflow-x: auto !important;
+    white-space: nowrap !important;
+    flex-shrink: 0 !important;
+  }
+  .nl {
+    padding: 5px 8px !important;
+    font-size: 11px !important;
+  }
+
+  /* Logo smaller on mobile */
+  .logo-txt { font-size: 14px !important; }
+  .logo-icon { width: 26px !important; height: 26px !important; }
+
+  /* Ticker bar wraps nicely */
+  .ticker-bar, [class*="ticker"] {
+    font-size: 11px !important;
+    overflow-x: auto !important;
+    white-space: nowrap !important;
+  }
+
+  /* Tables scroll horizontally */
+  .tbl-wrap, [class*="table"] {
+    overflow-x: auto !important;
+  }
+  .tbl-hdr, .stock-row {
+    min-width: 600px !important;
+  }
+
+  /* News layout: single column */
+  .news-layout {
+    display: flex !important;
+    flex-direction: column !important;
+  }
+  .news-sidebar {
+    width: 100% !important;
+  }
+
+  /* Options chain: single column */
+  .chain-wrap, [class*="chain"] {
+    flex-direction: column !important;
+  }
+
+  /* Smaller base font */
+  body { font-size: 13px !important; }
+
+  /* Hide non-essential columns on stock table */
+  .tbl-hdr span:nth-child(5),
+  .tbl-hdr span:nth-child(6),
+  .stock-row > div:nth-child(5),
+  .stock-row > div:nth-child(6) {
+    display: none !important;
+  }
+
+  /* Floating theme button position */
+  #_themeBtn {
+    bottom: 12px !important;
+    right: 12px !important;
+    width: 36px !important;
+    height: 36px !important;
+    font-size: 15px !important;
+  }
+}
+
+/* Extra small phones */
+@media (max-width: 400px) {
+  .nl { font-size: 10px !important; padding: 4px 6px !important; }
+  #chart, [id*="chart"] { height: 220px !important; }
+  body { font-size: 12px !important; }
+}
