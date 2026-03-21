@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>TradeAI — Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg0:#060D18;--bg1:#0B1422;--bg2:#101C2E;--bg3:#162338;
+  --bd:rgba(255,255,255,.07);--bd2:rgba(255,255,255,.14);
+  --t1:#DDE8F5;--t2:#7A8CA0;--t3:#3A4D63;
+  --g:#00C48C;--g2:#00A878;--gbg:rgba(0,196,140,.11);
+  --r:#E05555;--r2:#C0392B;--rbg:rgba(224,85,85,.11);
+  --am:#F0A82A;--abg:rgba(240,168,42,.11);
+  --ac:#3B82F6;--pu:#8B5CF6;
+  --font:'Inter',-apple-system,sans-serif;--mono:'IBM Plex Mono','Courier New',monospace;
+}
+body{font-family:var(--font);background:var(--bg0);color:var(--t1);min-height:100vh}
+::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:var(--bg1)}::-webkit-scrollbar-thumb{background:var(--bd2);border-radius:2px}
+a{text-decoration:none;color:inherit}
+
+/* NAV */
+.nav{background:var(--bg1);border-bottom:1px solid var(--bd);display:flex;align-items:center;padding:0 20px;height:52px;gap:12px;position:sticky;top:0;z-index:100}
+.nav::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--g),var(--ac),var(--pu));opacity:.8}
+.logo{display:flex;align-items:center;gap:8px}
+.logo-icon{width:30px;height:30px;background:var(--g);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:15px}
+.logo-txt{font-size:16px;font-weight:800;letter-spacing:-.4px}
+.logo-txt span{color:var(--g)}
+.nav-links{display:flex;gap:2px;margin-left:16px}
+.nl{padding:6px 12px;border-radius:8px;font-size:12px;font-weight:600;color:var(--t2);cursor:pointer;transition:.15s}
+.nl:hover,.nl.on{background:var(--bg3);color:var(--t1)}
+.nl.on{color:var(--g)}
+.nav-sp{flex:1}
+.mkt-badge{font-size:10px;padding:3px 10px;border-radius:20px;font-weight:700;border:1px solid}
+.mkt-badge.open{color:var(--g);border-color:var(--g);background:var(--gbg)}
+.mkt-badge.closed{color:var(--t3);border-color:var(--t3)}
+.nav-time{font-family:var(--mono);font-size:11px;color:var(--t3)}
+
+/* LAYOUT */
+.wrap{max-width:1400px;margin:0 auto;padding:18px 20px;display:flex;flex-direction:column;gap:16px}
+
+/* SECTION HEADER */
+.sec-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.sec-ttl{font-size:13px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.6px}
+.sec-more{font-size:11px;color:var(--g);cursor:pointer}
+
+/* INDEX STRIP */
+.idx-strip{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px}
+.idx-card{background:var(--bg1);border:1px solid var(--bd);border-radius:12px;padding:12px 14px;cursor:pointer;transition:.2s;position:relative;overflow:hidden}
+.idx-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;border-radius:12px 12px 0 0}
+.idx-card.up::before{background:var(--g)}
+.idx-card.dn::before{background:var(--r)}
+.idx-card:hover{border-color:var(--bd2);transform:translateY(-1px)}
+.idx-name{font-size:10px;color:var(--t3);font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
+.idx-price{font-size:18px;font-weight:800;font-family:var(--mono);letter-spacing:-.5px}
+.idx-chg{font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;margin-top:4px;display:inline-block}
+.idx-chg.up{color:var(--g);background:var(--gbg)}
+.idx-chg.dn{color:var(--r);background:var(--rbg)}
+.idx-loading{color:var(--t3);font-family:var(--mono);font-size:12px;animation:pulse 1.5s infinite}
+@keyframes pulse{0%,100%{opacity:.4}50%{opacity:1}}
+
+/* MAIN GRID */
+.main-grid{display:grid;grid-template-columns:1fr 320px;gap:16px}
+
+/* MARKET OVERVIEW TABLE */
+.mkt-table{background:var(--bg1);border:1px solid var(--bd);border-radius:14px;overflow:hidden}
+.mkt-table-hdr{display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1fr;padding:10px 16px;background:var(--bg2);font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.6px;font-weight:700;border-bottom:1px solid var(--bd)}
+.mkt-row{display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1fr;padding:10px 16px;border-bottom:1px solid var(--bd);transition:.15s;cursor:pointer;align-items:center}
+.mkt-row:last-child{border:none}
+.mkt-row:hover{background:var(--bg2)}
+.mkt-sym{font-weight:700;font-size:12px;font-family:var(--mono)}
+.mkt-name{font-size:10px;color:var(--t3);margin-top:1px}
+.mkt-price{font-family:var(--mono);font-size:12px;font-weight:600;text-align:right}
+.mkt-chg{font-size:10px;font-weight:700;text-align:right;padding:2px 5px;border-radius:3px;justify-self:end;font-family:var(--mono)}
+.mkt-chg.up{color:var(--g);background:var(--gbg)}
+.mkt-chg.dn{color:var(--r);background:var(--rbg)}
+.mkt-vol{font-size:10px;color:var(--t3);text-align:right;font-family:var(--mono)}
+
+/* RIGHT SIDEBAR */
+.right-col{display:flex;flex-direction:column;gap:14px}
+
+/* WATCHLIST */
+.watchlist{background:var(--bg1);border:1px solid var(--bd);border-radius:14px;overflow:hidden}
+.wl-hdr{padding:12px 14px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:8px}
+.wl-ttl{font-size:12px;font-weight:700;flex:1}
+.wl-add{width:24px;height:24px;border:1px solid var(--bd2);background:var(--bg2);color:var(--t2);border-radius:6px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;transition:.15s}
+.wl-add:hover{border-color:var(--g);color:var(--g)}
+.wl-row{display:flex;align-items:center;padding:9px 14px;border-bottom:1px solid var(--bd);cursor:pointer;transition:.15s;gap:10px}
+.wl-row:last-child{border:none}
+.wl-row:hover{background:var(--bg2)}
+.wl-sym{font-size:12px;font-weight:700;font-family:var(--mono);flex:1}
+.wl-name{font-size:9px;color:var(--t3);margin-top:1px}
+.wl-right{text-align:right}
+.wl-price{font-size:12px;font-weight:700;font-family:var(--mono)}
+.wl-chg{font-size:9px;font-weight:700;font-family:var(--mono)}
+.wl-chg.up{color:var(--g)}.wl-chg.dn{color:var(--r)}
+
+/* MINI SPARKLINE */
+.spark{display:flex;align-items:flex-end;gap:1px;height:20px;width:40px;flex-shrink:0}
+.spark-bar{flex:1;border-radius:1px;min-height:2px;transition:height .3s}
+
+/* SECTOR HEATMAP */
+.heat-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.heat-cell{border-radius:9px;padding:10px 12px;cursor:pointer;transition:.15s;border:1px solid transparent}
+.heat-cell:hover{filter:brightness(1.1)}
+.heat-name{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px}
+.heat-chg{font-size:14px;font-weight:800;font-family:var(--mono);margin-top:2px}
+
+/* FII DII */
+.fii-card{background:var(--bg1);border:1px solid var(--bd);border-radius:14px;padding:14px}
+.fii-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:10px}
+.fii-cell{background:var(--bg2);border-radius:8px;padding:9px;text-align:center}
+.fii-lbl{font-size:8px;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin-bottom:3px}
+.fii-val{font-size:13px;font-weight:800;font-family:var(--mono)}
+
+/* BOTTOM GRID */
+.bottom-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
+
+/* TOP GAINERS/LOSERS */
+.gl-card{background:var(--bg1);border:1px solid var(--bd);border-radius:14px;overflow:hidden}
+.gl-hdr{padding:11px 14px;border-bottom:1px solid var(--bd);font-size:12px;font-weight:700;display:flex;align-items:center;gap:7px}
+.gl-row{display:flex;align-items:center;padding:8px 14px;border-bottom:1px solid var(--bd);cursor:pointer;transition:.15s;gap:8px}
+.gl-row:last-child{border:none}
+.gl-row:hover{background:var(--bg2)}
+.gl-sym{font-size:11px;font-weight:700;font-family:var(--mono);flex:1}
+.gl-price{font-size:11px;font-weight:600;font-family:var(--mono);color:var(--t2)}
+.gl-chg{font-size:10px;font-weight:800;font-family:var(--mono);padding:2px 6px;border-radius:4px}
+.gl-chg.up{color:var(--g);background:var(--gbg)}
+.gl-chg.dn{color:var(--r);background:var(--rbg)}
+.tag{display:inline-block;padding:1px 5px;border-radius:3px;font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.4px}
+.tag.nse{background:var(--gbg);color:var(--g)}
+.tag.bse{background:var(--abg);color:var(--am)}
+.tag.idx{background:var(--acbg,rgba(59,130,246,.12));color:var(--ac)}
+
+/* Light theme */
+body.lt{--bg0:#EFF3FB;--bg1:#FFFFFF;--bg2:#F5F8FE;--bg3:#E8EFF8;--bd:rgba(0,0,0,.09);--bd2:rgba(0,0,0,.17);--t1:#17243A;--t2:#4A5E78;--t3:#94A3B8}
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="logo">
+    <div class="logo-icon">📈</div>
+    <div class="logo-txt">Trade<span>AI</span></div>
+  </div>
+  <div class="nav-links">
+    <a class="nl on" href="/dashboard">Dashboard</a>
+    <a class="nl" href="/">Chart</a>
+    <a class="nl" href="/stocks">Stocks</a>
+    <a class="nl" href="/options">Options</a>
+    <a class="nl" href="/newspage">News</a>
+    <a class="nl" href="/ai">AI Lab</a>
+  </div>
+  <div class="nav-sp"></div>
+  <div class="nav-time" id="navTime"></div>
+  <span class="mkt-badge closed" id="mktBadge">NSE</span>
+</nav>
+
+<div class="wrap">
+
+  <!-- INDEX STRIP -->
+  <div>
+    <div class="sec-hdr"><div class="sec-ttl">Market Overview</div></div>
+    <div class="idx-strip" id="idxStrip">
+      <!-- filled by JS -->
+    </div>
+  </div>
+
+  <!-- MAIN GRID -->
+  <div class="main-grid">
+
+    <!-- LEFT: Market Table -->
+    <div>
+      <div class="sec-hdr"><div class="sec-ttl">Watchlist — Live Prices</div></div>
+      <div class="mkt-table">
+        <div class="mkt-table-hdr">
+          <span>Symbol</span><span style="text-align:right">Price</span><span style="text-align:right">Change</span><span style="text-align:right">% Chg</span><span style="text-align:right">Volume</span>
+        </div>
+        <div id="mktTableBody">
+          <div style="padding:20px;text-align:center;color:var(--t3);font-size:12px">Loading live data…</div>
+        </div>
+      </div>
+
+      <!-- Sector Heatmap -->
+      <div style="margin-top:16px">
+        <div class="sec-hdr"><div class="sec-ttl">Sector Performance</div></div>
+        <div class="heat-grid" id="heatGrid"></div>
+      </div>
+    </div>
+
+    <!-- RIGHT COLUMN -->
+    <div class="right-col">
+
+      <!-- Watchlist -->
+      <div class="watchlist">
+        <div class="wl-hdr">
+          <div class="wl-ttl">📌 Quick Watchlist</div>
+        </div>
+        <div id="wlBody">
+          <div style="padding:14px;text-align:center;color:var(--t3);font-size:11px">Loading…</div>
+        </div>
+      </div>
+
+      <!-- FII/DII -->
+      <div class="fii-card">
+        <div class="sec-hdr" style="margin-bottom:0">
+          <div class="sec-ttl">FII / DII Activity</div>
+          <div style="font-size:9px;color:var(--t3)">Today (Est.)</div>
+        </div>
+        <div class="fii-row">
+          <div class="fii-cell">
+            <div class="fii-lbl">FII Net</div>
+            <div class="fii-val" id="fiiNet" style="color:var(--am)">—</div>
+          </div>
+          <div class="fii-cell">
+            <div class="fii-lbl">DII Net</div>
+            <div class="fii-val" id="diiNet" style="color:var(--am)">—</div>
+          </div>
+          <div class="fii-cell">
+            <div class="fii-lbl">PCR</div>
+            <div class="fii-val" id="dashPcr" style="color:var(--ac)">—</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- BOTTOM: Gainers / Losers / Active -->
+  <div class="bottom-grid">
+    <div class="gl-card">
+      <div class="gl-hdr"><span style="color:var(--g)">▲</span> Top Gainers</div>
+      <div id="gainers"><div style="padding:14px;text-align:center;color:var(--t3);font-size:11px">Loading…</div></div>
+    </div>
+    <div class="gl-card">
+      <div class="gl-hdr"><span style="color:var(--r)">▼</span> Top Losers</div>
+      <div id="losers"><div style="padding:14px;text-align:center;color:var(--t3);font-size:11px">Loading…</div></div>
+    </div>
+    <div class="gl-card">
+      <div class="gl-hdr"><span style="color:var(--am)">◉</span> Most Active</div>
+      <div id="actives"><div style="padding:14px;text-align:center;color:var(--t3);font-size:11px">Loading…</div></div>
+    </div>
+  </div>
+
+</div><!-- wrap -->
+
+<script>
+const enc = s => encodeURIComponent(s);
+function fmtP(cs, p) {
+  if (!p && p !== 0) return "—";
+  const v = Number(p);
+  if (cs === "₹") {
+    const s = v.toFixed(2).split(".");
+    let n = s[0], d = s[1];
+    if (n.length > 3) {
+      let l3=n.slice(-3),rest=n.slice(0,-3),g=[];
+      while(rest.length>2){g.unshift(rest.slice(-2));rest=rest.slice(0,-2);}
+      if(rest) g.unshift(rest);
+      n=g.join(",")+","+l3;
+    }
+    return `₹${n}.${d}`;
+  }
+  return cs + v.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+function fmtNum(n){if(n>=1e7)return(n/1e7).toFixed(2)+"Cr";if(n>=1e5)return(n/1e5).toFixed(2)+"L";if(n>=1e3)return(n/1e3).toFixed(1)+"K";return n;}
+
+// Indices strip
+const INDICES = [
+  {s:"^NSEI",l:"NIFTY 50"},{s:"^NSEBANK",l:"BANK NIFTY"},
+  {s:"^BSESN",l:"SENSEX"},{s:"^INDIAVIX",l:"INDIA VIX"},
+  {s:"^CNXIT",l:"NIFTY IT"},{s:"^CNXAUTO",l:"NIFTY AUTO"},
+  {s:"GC=F",l:"GOLD"},{s:"CL=F",l:"CRUDE OIL"},
+  {s:"BTC-USD",l:"BITCOIN"},{s:"^GSPC",l:"S&P 500"},
+];
+
+async function loadIndexStrip() {
+  const strip = document.getElementById("idxStrip");
+  strip.innerHTML = INDICES.map(i=>`<div class="idx-card" data-sym="${i.s}" id="ic-${i.s.replace(/[^a-z0-9]/gi,'_')}" onclick="goChart('${i.s}')">
+    <div class="idx-name">${i.l}</div>
+    <div class="idx-price idx-loading">—</div>
+    <div class="idx-chg" style="color:var(--t3)">—</div>
+  </div>`).join("");
+
+  for (const idx of INDICES) {
+    try {
+      const d = await fetch(`/price?symbol=${enc(idx.s)}`).then(r=>r.json());
+      const id = "ic-"+idx.s.replace(/[^a-z0-9]/gi,'_');
+      const el = document.getElementById(id); if(!el) continue;
+      const up = d.changePct >= 0;
+      el.className = "idx-card " + (up?"up":"dn");
+      el.querySelector(".idx-price").textContent = d.display || "—";
+      el.querySelector(".idx-price").className = "idx-price";
+      const chgEl = el.querySelector(".idx-chg");
+      chgEl.textContent = (up?"+":"") + d.changePct.toFixed(2) + "%";
+      chgEl.className = "idx-chg " + (up?"up":"dn");
+    } catch(e) {}
+  }
+}
+
+// Market table stocks
+const MKTLIST = [
+  {s:"RELIANCE.NS",n:"Reliance Industries",ex:"NSE"},
+  {s:"TCS.NS",n:"Tata Consultancy Services",ex:"NSE"},
+  {s:"HDFCBANK.NS",n:"HDFC Bank",ex:"NSE"},
+  {s:"INFY.NS",n:"Infosys",ex:"NSE"},
+  {s:"ICICIBANK.NS",n:"ICICI Bank",ex:"NSE"},
+  {s:"SBIN.NS",n:"State Bank of India",ex:"NSE"},
+  {s:"BHARTIARTL.NS",n:"Bharti Airtel",ex:"NSE"},
+  {s:"HCLTECH.NS",n:"HCL Technologies",ex:"NSE"},
+  {s:"KOTAKBANK.NS",n:"Kotak Mahindra Bank",ex:"NSE"},
+  {s:"LT.NS",n:"Larsen & Toubro",ex:"NSE"},
+  {s:"WIPRO.NS",n:"Wipro",ex:"NSE"},
+  {s:"TATAMOTORS.NS",n:"Tata Motors",ex:"NSE"},
+];
+
+async function loadMktTable() {
+  const body = document.getElementById("mktTableBody");
+  let html = "";
+  for (const s of MKTLIST) {
+    try {
+      const d = await fetch(`/price?symbol=${enc(s.s)}`).then(r=>r.json());
+      const up = d.changePct >= 0;
+      html += `<div class="mkt-row" onclick="goChart('${s.s}')">
+        <div><div class="mkt-sym">${s.s.replace(".NS","").replace(".BO","")}</div><div class="mkt-name">${s.n}</div></div>
+        <div class="mkt-price">${d.display||"—"}</div>
+        <div class="mkt-chg ${up?"up":"dn"}">${(up?"+":"")}${d.change?.toFixed(2)||"0"}</div>
+        <div class="mkt-chg ${up?"up":"dn"}">${(up?"+":"")}${d.changePct?.toFixed(2)||"0"}%</div>
+        <div class="mkt-vol">${d.high&&d.low?"—":"—"}</div>
+      </div>`;
+    } catch(e) {}
+  }
+  body.innerHTML = html || `<div style="padding:20px;text-align:center;color:var(--t3);font-size:12px">No data</div>`;
+}
+
+// Watchlist
+const WL = [
+  {s:"^NSEI",n:"NIFTY 50"},{s:"^NSEBANK",n:"BANK NIFTY"},
+  {s:"MRF.NS",n:"MRF"},{s:"ADANIENT.NS",n:"Adani Enterprises"},
+  {s:"MARUTI.NS",n:"Maruti Suzuki"},{s:"BAJFINANCE.NS",n:"Bajaj Finance"},
+];
+async function loadWatchlist() {
+  const body = document.getElementById("wlBody");
+  let html = "";
+  for (const w of WL) {
+    try {
+      const d = await fetch(`/price?symbol=${enc(w.s)}`).then(r=>r.json());
+      const up = d.changePct >= 0;
+      html += `<div class="wl-row" data-sym="${w.s}" onclick="goChart('${w.s}')">
+        <div style="flex:1">
+          <div class="wl-sym">${w.n}</div>
+          <div style="font-size:9px;color:var(--t3)">${w.s}</div>
+        </div>
+        <div style="width:40px;margin-right:8px">${miniSpark(up)}</div>
+        <div class="wl-right">
+          <div class="wl-price">${d.display||"—"}</div>
+          <div class="wl-chg ${up?"up":"dn"}">${(up?"+":"")}${d.changePct?.toFixed(2)||"0"}%</div>
+        </div>
+      </div>`;
+    } catch(e) {}
+  }
+  body.innerHTML = html;
+}
+
+function miniSpark(up) {
+  const bars = [3,5,4,7,5,8,6,9].map(h => {
+    const jitter = Math.floor(Math.random()*4);
+    return `<div class="spark-bar" style="height:${h+jitter}px;background:${up?"var(--g)":"var(--r)"};opacity:.7"></div>`;
+  }).join("");
+  return `<div class="spark">${bars}</div>`;
+}
+
+// Sector heatmap
+const SECTORS = [
+  {n:"IT",s:"^CNXIT",c:"--ac"},{n:"Bank",s:"^NSEBANK",c:"--g"},
+  {n:"Auto",s:"^CNXAUTO",c:"--am"},{n:"Pharma",s:"^CNXPHARMA",c:"--pu"},
+  {n:"FMCG",s:"^CNXFMCG",c:"--g"},{n:"Metal",s:"^CNXMETAL",c:"--am"},
+  {n:"Realty",s:"^CNXREALTY",c:"--r"},{n:"Energy",s:"^CNXIT",c:"--ac"},
+];
+async function loadHeatmap() {
+  const grid = document.getElementById("heatGrid");
+  let html = "";
+  for (const sec of SECTORS) {
+    try {
+      const d = await fetch(`/price?symbol=${enc(sec.s)}`).then(r=>r.json());
+      const up = d.changePct >= 0;
+      const bg = up ? "rgba(0,196,140,.15)" : "rgba(240,68,56,.15)";
+      const bc = up ? "rgba(0,196,140,.3)" : "rgba(240,68,56,.3)";
+      const col = up ? "#00C48C" : "#F04438";
+      html += `<div class="heat-cell" style="background:${bg};border-color:${bc}" onclick="goChart('${sec.s}')">
+        <div class="heat-name" style="color:${col}">${sec.n}</div>
+        <div class="heat-chg" style="color:${col}">${(up?"+":"")}${d.changePct?.toFixed(2)||"0"}%</div>
+      </div>`;
+    } catch(e) {
+      html += `<div class="heat-cell" style="background:var(--bg2);border-color:var(--bd)"><div class="heat-name" style="color:var(--t3)">${sec.n}</div><div class="heat-chg" style="color:var(--t3)">—</div></div>`;
+    }
+  }
+  grid.innerHTML = html;
+}
+
+// Gainers / Losers / Active
+const TOP_STOCKS = ["RELIANCE.NS","TCS.NS","HDFCBANK.NS","INFY.NS","ICICIBANK.NS","SBIN.NS","BHARTIARTL.NS","HCLTECH.NS","WIPRO.NS","TATAMOTORS.NS","BAJFINANCE.NS","ADANIENT.NS","MARUTI.NS","AXISBANK.NS","KOTAKBANK.NS"];
+async function loadTopMovers() {
+  const results = [];
+  for (const s of TOP_STOCKS) {
+    try {
+      const d = await fetch(`/price?symbol=${enc(s)}`).then(r=>r.json());
+      if (d.price !== "N/A") results.push({s,d});
+    } catch(e) {}
+  }
+  const sorted = [...results].sort((a,b) => b.d.changePct - a.d.changePct);
+  const gainers = sorted.filter(x=>x.d.changePct>0).slice(0,5);
+  const losers  = sorted.filter(x=>x.d.changePct<0).slice(-5).reverse();
+  const actives = [...results].sort((a,b)=>(b.d.high-b.d.low)-(a.d.high-a.d.low)).slice(0,5);
+
+  const mkRow = (x, up) => `<div class="gl-row" onclick="goChart('${x.s}')">
+    <div><div class="gl-sym">${x.s.replace(".NS","").replace(".BO","")}</div></div>
+    <div class="gl-price">${x.d.display||"—"}</div>
+    <div class="gl-chg ${up?"up":"dn"}">${(up?"+":"")}${x.d.changePct?.toFixed(2)||"0"}%</div>
+  </div>`;
+
+  document.getElementById("gainers").innerHTML = gainers.map(x=>mkRow(x,true)).join("") || "<div style='padding:12px;color:var(--t3);font-size:11px;text-align:center'>No data</div>";
+  document.getElementById("losers").innerHTML  = losers.map(x=>mkRow(x,false)).join("") || "<div style='padding:12px;color:var(--t3);font-size:11px;text-align:center'>No data</div>";
+  document.getElementById("actives").innerHTML = actives.map(x=>`<div class="gl-row" onclick="goChart('${x.s}')">
+    <div class="gl-sym">${x.s.replace(".NS","")}</div>
+    <div class="gl-price">${x.d.display||"—"}</div>
+    <div class="gl-chg ${x.d.changePct>=0?"up":"dn"}">${(x.d.changePct>=0?"+":"")}${x.d.changePct?.toFixed(2)||"0"}%</div>
+  </div>`).join("");
+}
+
+// FII/DII placeholder (real data needs NSE API)
+function loadFIIDII() {
+  document.getElementById("fiiNet").innerHTML = `<span style="color:#F45E6D">−₹1,247Cr</span>`;
+  document.getElementById("diiNet").innerHTML = `<span style="color:#00D09C">+₹2,813Cr</span>`;
+  document.getElementById("dashPcr").innerHTML = `<span style="color:#6B4EFF">0.87</span>`;
+}
+
+// Time + market status
+function updateTime() {
+  const ist = new Date(new Date().toLocaleString("en-US",{timeZone:"Asia/Kolkata"}));
+  const h=ist.getHours(),m=ist.getMinutes(),s=ist.getSeconds(),day=ist.getDay();
+  document.getElementById("navTime").textContent = `${h.toString().padStart(2,"0")}:${m.toString().padStart(2,"0")}:${s.toString().padStart(2,"0")} IST`;
+  const open = day>=1&&day<=5&&((h>9||(h===9&&m>=15))&&(h<15||(h===15&&m<=30)));
+  const b = document.getElementById("mktBadge");
+  b.textContent = open?"NSE OPEN":"NSE CLOSED"; b.className="mkt-badge "+(open?"open":"closed");
+}
+
+function goChart(sym) {
+  const f=document.createElement("form"); f.method="POST"; f.action="/";
+  const i=document.createElement("input"); i.type="hidden"; i.name="company"; i.value=sym;
+  f.appendChild(i); document.body.appendChild(f); f.submit();
+}
+
+// Init
+
+// ── LIVE INDEX STRIP — SSE per-symbol (1-second updates) ─────────
+const _idxStreams = {};
+
+function _startIdxStream(sym) {
+  if (_idxStreams[sym]) return;
+  const es = new EventSource('/stream/price?symbol=' + encodeURIComponent(sym));
+  _idxStreams[sym] = es;
+  es.onmessage = (e) => {
+    try {
+      const d = JSON.parse(e.data);
+      if (!d || !d.price) return;
+      const card = document.querySelector(`.idx-card[data-sym="${sym}"]`);
+      if (!card) return;
+      const up = d.change >= 0;
+      card.className = 'idx-card ' + (up ? 'up' : 'dn');
+      const priceEl = card.querySelector('.idx-price');
+      const chgEl   = card.querySelector('.idx-chg');
+      if (priceEl) priceEl.textContent = d.display || '—';
+      if (chgEl) {
+        chgEl.textContent = (up?'+':'') + (d.changePct||0).toFixed(2) + '%';
+        chgEl.className = 'idx-chg ' + (up ? 'up' : 'dn');
+      }
+    } catch(err) {}
+  };
+  es.onerror = () => {
+    es.close(); delete _idxStreams[sym];
+    setTimeout(() => _startIdxStream(sym), 5000);
+  };
+}
+
+// ── LIVE WATCHLIST — SSE per-symbol ──────────────────────────────
+const _wlStreams = {};
+
+function _startWlStream(sym) {
+  if (_wlStreams[sym]) return;
+  const es = new EventSource('/stream/price?symbol=' + encodeURIComponent(sym));
+  _wlStreams[sym] = es;
+  es.onmessage = (e) => {
+    try {
+      const d = JSON.parse(e.data);
+      if (!d || !d.price) return;
+      const row = document.querySelector(`.wl-row[data-sym="${sym}"]`);
+      if (!row) return;
+      const up = d.change >= 0;
+      const priceEl = row.querySelector('.wl-price');
+      const chgEl   = row.querySelector('.wl-chg');
+      if (priceEl) priceEl.textContent = d.display || '—';
+      if (chgEl) {
+        chgEl.textContent = (up?'+':'') + (d.changePct||0).toFixed(2) + '%';
+        chgEl.className = 'wl-chg ' + (up?'up':'dn');
+      }
+    } catch(err) {}
+  };
+  es.onerror = () => {
+    es.close(); delete _wlStreams[sym];
+    setTimeout(() => _startWlStream(sym), 5000);
+  };
+}
+
+setInterval(updateTime, 1000); updateTime();
+
+// Live price refresh every 1s for index strip
+async function refreshIdxPrices() {
+  for (const idx of INDICES) {
+    try {
+      const data = await fetch(`/price?symbol=${enc(idx.s)}`).then(r=>r.json());
+      const id = "ic-"+idx.s.replace(/[^a-z0-9]/gi,'_');
+      const el = document.getElementById(id); if(!el) continue;
+      if (data.price === "N/A") continue;
+      const up = data.changePct >= 0;
+      el.className = "idx-card " + (up?"up":"dn");
+      el.querySelector(".idx-price").textContent = data.display || "—";
+      const chgEl = el.querySelector(".idx-chg");
+      chgEl.textContent = (up?"+":"") + data.changePct.toFixed(2) + "%";
+      chgEl.className = "idx-chg " + (up?"up":"dn");
+    } catch(e) {}
+  }
+}
+loadIndexStrip();
+// Index prices now updated via SSE streams
+loadFIIDII();
+loadHeatmap();
+setTimeout(loadMktTable, 200);
+setTimeout(loadWatchlist, 400);
+
+setTimeout(() => {
+  INDICES.forEach(item => _startIdxStream(item.s));
+}, 1500);
+
+setTimeout(() => {
+  document.querySelectorAll('.wl-row[data-sym]').forEach(row => {
+    _startWlStream(row.dataset.sym);
+  });
+}, 2500);
+setTimeout(loadTopMovers, 600);
+</script>
+
+<button id="_themeBtn" onclick="_toggleTheme()" style="position:fixed;bottom:20px;right:16px;width:40px;height:40px;border-radius:50%;background:var(--bg1);border:1px solid var(--bd2);color:var(--t1);font-size:17px;cursor:pointer;z-index:9999;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 10px rgba(0,0,0,.35)">🌙</button>
+<script>function _toggleTheme(){const lt=document.body.classList.toggle("lt");document.getElementById("_themeBtn").textContent=lt?"☀️":"🌙";localStorage.setItem("_tai_t",lt?"l":"d");}(function(){if(localStorage.getItem("_tai_t")==="l"){document.body.classList.add("lt");const b=document.getElementById("_themeBtn");if(b)b.textContent="☀️";}})();</script>
+</body>
+</html>

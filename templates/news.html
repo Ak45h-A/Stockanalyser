@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>TradeAI — News</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg0:#060D18;--bg1:#0B1422;--bg2:#101C2E;--bg3:#162338;
+  --bd:rgba(255,255,255,.07);--bd2:rgba(255,255,255,.14);
+  --t1:#DDE8F5;--t2:#7A8CA0;--t3:#3A4D63;
+  --g:#00C48C;--g2:#00A878;--gbg:rgba(0,196,140,.11);
+  --r:#E05555;--r2:#C0392B;--rbg:rgba(224,85,85,.11);
+  --am:#F0A82A;--abg:rgba(240,168,42,.11);
+  --ac:#3B82F6;--pu:#8B5CF6;
+  --font:'Inter',-apple-system,sans-serif;--mono:'IBM Plex Mono','Courier New',monospace;
+}
+body{font-family:var(--font);background:var(--bg0);color:var(--t1);min-height:100vh}
+::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:var(--bg1)}::-webkit-scrollbar-thumb{background:var(--bd2);border-radius:2px}
+a{text-decoration:none;color:inherit}
+
+.nav{background:var(--bg1);border-bottom:1px solid var(--bd);display:flex;align-items:center;padding:0 20px;height:52px;gap:12px;position:sticky;top:0;z-index:100}
+.nav::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--g),var(--ac),var(--pu));opacity:.8}
+.logo{display:flex;align-items:center;gap:8px}
+.logo-icon{width:30px;height:30px;background:var(--g);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:15px}
+.logo-txt{font-size:16px;font-weight:800;letter-spacing:-.4px}.logo-txt span{color:var(--g)}
+.nav-links{display:flex;gap:2px;margin-left:16px}
+.nl{padding:6px 12px;border-radius:8px;font-size:12px;font-weight:600;color:var(--t2);cursor:pointer;transition:.15s}
+.nl:hover,.nl.on{background:var(--bg3);color:var(--t1)}.nl.on{color:var(--g)}
+.nav-sp{flex:1}
+
+.wrap{max-width:1200px;margin:0 auto;padding:18px 20px}
+
+/* FILTER BAR */
+.filter-bar{display:flex;align-items:center;gap:8px;margin-bottom:18px;flex-wrap:wrap}
+.filter-btn{padding:5px 14px;border:1px solid var(--bd2);background:var(--bg1);color:var(--t2);border-radius:8px;font-size:11px;font-weight:600;cursor:pointer;transition:.15s}
+.filter-btn.on,.filter-btn:hover{background:var(--g);color:#003322;border-color:var(--g)}
+.news-search{display:flex;align-items:center;gap:8px;background:var(--bg1);border:1px solid var(--bd2);border-radius:10px;padding:0 12px;height:36px;margin-left:auto}
+.news-search input{background:none;border:none;color:var(--t1);font-family:var(--font);font-size:12px;outline:none;width:180px}
+.news-search input::placeholder{color:var(--t3)}
+
+/* GRID LAYOUT */
+.news-layout{display:grid;grid-template-columns:1fr 300px;gap:18px}
+
+/* NEWS LIST */
+.news-list{display:flex;flex-direction:column;gap:10px}
+.news-card{background:var(--bg1);border:1px solid var(--bd);border-radius:12px;overflow:hidden;transition:.2s;cursor:pointer}
+.news-card:hover{border-color:var(--bd2);transform:translateY(-1px);box-shadow:0 6px 24px rgba(0,0,0,.3)}
+.news-card a{text-decoration:none;color:inherit}
+.news-card-inner{display:flex;gap:14px;padding:14px}
+.news-thumb{width:90px;height:68px;border-radius:8px;object-fit:cover;flex-shrink:0;background:var(--bg3)}
+.news-body{flex:1;min-width:0}
+.news-source{font-size:9px;color:var(--t3);font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;display:flex;align-items:center;gap:6px}
+.news-title{font-size:13px;font-weight:700;line-height:1.5;color:var(--t1);margin-bottom:5px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-clamp:2;overflow:hidden}
+.news-date{font-size:9px;color:var(--t3);font-family:var(--mono)}
+.sent-badge{font-size:8px;font-weight:800;padding:2px 7px;border-radius:4px;text-transform:uppercase;letter-spacing:.4px}
+.sent-badge.pos{background:var(--gbg);color:var(--g)}
+.sent-badge.neg{background:var(--rbg);color:var(--r)}
+.sent-badge.neu{background:var(--abg);color:var(--am)}
+
+/* FEATURED (first article) */
+.news-card.featured .news-card-inner{flex-direction:column;padding:0}
+.news-card.featured .news-thumb{width:100%;height:180px;border-radius:12px 12px 0 0}
+.news-card.featured .news-body{padding:14px}
+.news-card.featured .news-title{font-size:16px;font-weight:800;-webkit-line-clamp:3;line-clamp:3}
+
+/* SIDEBAR */
+.news-sidebar{display:flex;flex-direction:column;gap:14px}
+.sidebar-card{background:var(--bg1);border:1px solid var(--bd);border-radius:12px;padding:14px}
+.sidebar-ttl{font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.7px;font-weight:700;margin-bottom:10px;display:flex;align-items:center;gap:6px}
+.trend-item{display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--bd);cursor:pointer;transition:.15s}
+.trend-item:last-child{border:none}
+.trend-item:hover{color:var(--g)}
+.trend-rank{font-size:11px;color:var(--t3);font-family:var(--mono);width:16px;flex-shrink:0}
+.trend-name{font-size:11px;font-weight:700;flex:1}
+.trend-chg{font-size:10px;font-weight:700;font-family:var(--mono)}
+.trend-chg.up{color:var(--g)}.trend-chg.dn{color:var(--r)}
+.loading-card{padding:20px;text-align:center;color:var(--t3);font-size:12px}
+.pulse{animation:pulse2 1.5s infinite}
+@keyframes pulse2{0%,100%{opacity:.3}50%{opacity:1}}
+.skel{background:linear-gradient(90deg,var(--bg2),var(--bg3),var(--bg2));background-size:200% 100%;animation:shimmer 1.5s infinite;border-radius:4px}
+@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+
+/* Light theme */
+body.lt{--bg0:#EFF3FB;--bg1:#FFFFFF;--bg2:#F5F8FE;--bg3:#E8EFF8;--bd:rgba(0,0,0,.09);--bd2:rgba(0,0,0,.17);--t1:#17243A;--t2:#4A5E78;--t3:#94A3B8}
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="logo"><div class="logo-icon">📈</div><div class="logo-txt">Trade<span>AI</span></div></div>
+  <div class="nav-links">
+    <a class="nl" href="/dashboard">Dashboard</a>
+    <a class="nl" href="/">Chart</a>
+    <a class="nl" href="/stocks">Stocks</a>
+    <a class="nl" href="/options">Options</a>
+    <a class="nl on" href="/newspage">News</a>
+    <a class="nl" href="/ai">AI Lab</a>
+  </div>
+  <div class="nav-sp"></div>
+</nav>
+
+<div class="wrap">
+  <div class="filter-bar">
+    <button class="filter-btn on" onclick="setTopic('RELIANCE.NS',this)">Reliance</button>
+    <button class="filter-btn" onclick="setTopic('TCS.NS',this)">TCS</button>
+    <button class="filter-btn" onclick="setTopic('HDFCBANK.NS',this)">HDFC Bank</button>
+    <button class="filter-btn" onclick="setTopic('^NSEI',this)">NIFTY</button>
+    <button class="filter-btn" onclick="setTopic('^BSESN',this)">SENSEX</button>
+    <button class="filter-btn" onclick="setTopic('INFY.NS',this)">Infosys</button>
+    <button class="filter-btn" onclick="setTopic('BTC-USD',this)">Bitcoin</button>
+    <button class="filter-btn" onclick="setTopic('GC=F',this)">Gold</button>
+    <div class="news-search">
+      <span style="color:var(--t3)">🔍</span>
+      <input id="newsSearch" type="text" placeholder="Search symbol…" onkeydown="if(event.key==='Enter')searchNews()">
+    </div>
+  </div>
+
+  <div class="news-layout">
+    <div class="news-list" id="newsList">
+      <!-- skeleton -->
+      ${[...Array(4)].map(()=>`<div class="news-card"><div class="news-card-inner">
+        <div class="skel" style="width:90px;height:68px;border-radius:8px;flex-shrink:0"></div>
+        <div style="flex:1;display:flex;flex-direction:column;gap:6px">
+          <div class="skel" style="height:10px;width:80px"></div>
+          <div class="skel" style="height:14px;width:100%"></div>
+          <div class="skel" style="height:14px;width:80%"></div>
+          <div class="skel" style="height:9px;width:60px;margin-top:4px"></div>
+        </div>
+      </div></div>`).join("")}
+    </div>
+
+    <div class="news-sidebar">
+      <!-- Trending stocks -->
+      <div class="sidebar-card">
+        <div class="sidebar-ttl">🔥 Trending Today</div>
+        <div id="trendingList"><div class="loading-card pulse">Loading…</div></div>
+      </div>
+      <!-- Market sentiment -->
+      <div class="sidebar-card">
+        <div class="sidebar-ttl">📊 Market Snapshot</div>
+        <div id="snapList"><div class="loading-card pulse">Loading…</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const enc = s => encodeURIComponent(s);
+let curTopic = "RELIANCE.NS";
+
+function sentimentScore(title) {
+  const bull = ["surge","rally","gain","rise","high","growth","profit","up","bull","strong","beat","record","positive"];
+  const bear = ["fall","drop","crash","loss","down","weak","miss","bear","sell","decline","cut","risk","concern","slump"];
+  const t = title.toLowerCase();
+  const bs = bull.filter(w=>t.includes(w)).length;
+  const rs = bear.filter(w=>t.includes(w)).length;
+  if (bs > rs) return {label:"Positive", cls:"pos"};
+  if (rs > bs) return {label:"Negative", cls:"neg"};
+  return {label:"Neutral", cls:"neu"};
+}
+
+async function loadNews(sym) {
+  document.getElementById("newsList").innerHTML = [...Array(4)].map(()=>`<div class="news-card"><div class="news-card-inner">
+    <div class="skel" style="width:90px;height:68px;border-radius:8px;flex-shrink:0"></div>
+    <div style="flex:1;display:flex;flex-direction:column;gap:6px">
+      <div class="skel" style="height:10px;width:80px"></div>
+      <div class="skel" style="height:14px"></div>
+      <div class="skel" style="height:14px;width:80%"></div>
+    </div>
+  </div></div>`).join("");
+
+  try {
+    const items = await fetch(`/news?symbol=${enc(sym)}`).then(r=>r.json());
+    const list = Array.isArray(items) ? items : [];
+    if (!list.length) {
+      document.getElementById("newsList").innerHTML = `<div style="padding:40px;text-align:center;color:var(--t3)">📰 No news found</div>`;
+      return;
+    }
+    document.getElementById("newsList").innerHTML = list.map((n, i) => {
+      const sent = sentimentScore(n.title);
+      const isFirst = i === 0;
+      return `<div class="news-card ${isFirst?"featured":""}">
+        <a href="${n.url}" target="_blank" rel="noopener">
+          <div class="news-card-inner">
+            ${n.thumbnail?`<img class="news-thumb" src="${n.thumbnail}" alt="" onerror="this.style.display='none'">`:""}
+            <div class="news-body">
+              <div class="news-source">
+                ${n.source||"Yahoo Finance"}
+                <span class="sent-badge ${sent.cls}">${sent.label}</span>
+              </div>
+              <div class="news-title">${n.title}</div>
+              <div class="news-date">${n.pubDate||""}</div>
+            </div>
+          </div>
+        </a>
+      </div>`;
+    }).join("");
+  } catch(e) {
+    document.getElementById("newsList").innerHTML = `<div style="padding:20px;color:var(--r);font-size:12px">Error loading news</div>`;
+  }
+}
+
+function setTopic(sym, btn) {
+  curTopic = sym;
+  document.querySelectorAll(".filter-btn").forEach(b=>b.classList.remove("on"));
+  btn.classList.add("on");
+  loadNews(sym);
+}
+
+function searchNews() {
+  const v = document.getElementById("newsSearch").value.trim();
+  if (v) loadNews(v);
+}
+
+// Trending
+const TREND = [
+  {s:"RELIANCE.NS",n:"Reliance"},{s:"TCS.NS",n:"TCS"},
+  {s:"HDFCBANK.NS",n:"HDFC Bank"},{s:"SBIN.NS",n:"SBI"},
+  {s:"TATAMOTORS.NS",n:"Tata Motors"},{s:"BAJFINANCE.NS",n:"Bajaj Finance"},
+];
+async function loadTrending() {
+  let html = "";
+  for (let i=0;i<TREND.length;i++) {
+    try {
+      const d = await fetch(`/price?symbol=${enc(TREND[i].s)}`).then(r=>r.json());
+      const up = d.changePct >= 0;
+      html += `<div class="trend-item" onclick="goChart('${TREND[i].s}')">
+        <div class="trend-rank">${i+1}</div>
+        <div><div class="trend-name">${TREND[i].n}</div><div style="font-size:9px;color:var(--t3)">${d.display||"—"}</div></div>
+        <div class="trend-chg ${up?"up":"dn"}">${(up?"+":"")}${d.changePct?.toFixed(2)||"0"}%</div>
+      </div>`;
+    } catch(e) {}
+  }
+  document.getElementById("trendingList").innerHTML = html;
+}
+
+// Snapshot
+const SNAPS = [
+  {s:"^NSEI",n:"NIFTY 50"},{s:"^NSEBANK",n:"BANK NIFTY"},
+  {s:"GC=F",n:"GOLD"},{s:"CL=F",n:"CRUDE"},
+];
+async function loadSnapshot() {
+  let html = "";
+  for (const sn of SNAPS) {
+    try {
+      const d = await fetch(`/price?symbol=${enc(sn.s)}`).then(r=>r.json());
+      const up = d.changePct >= 0;
+      html += `<div class="trend-item" onclick="goChart('${sn.s}')">
+        <div style="flex:1"><div class="trend-name">${sn.n}</div><div style="font-size:9px;color:var(--t3)">${d.display||"—"}</div></div>
+        <div class="trend-chg ${up?"up":"dn"}">${(up?"+":"")}${d.changePct?.toFixed(2)||"0"}%</div>
+      </div>`;
+    } catch(e) {}
+  }
+  document.getElementById("snapList").innerHTML = html;
+}
+
+function goChart(sym) {
+  const f=document.createElement("form");f.method="POST";f.action="/";
+  const i=document.createElement("input");i.type="hidden";i.name="company";i.value=sym;
+  f.appendChild(i);document.body.appendChild(f);f.submit();
+}
+
+loadNews(curTopic);
+loadTrending();
+loadSnapshot();
+</script>
+
+<button id="_themeBtn" onclick="_toggleTheme()" style="position:fixed;bottom:20px;right:16px;width:40px;height:40px;border-radius:50%;background:var(--bg1);border:1px solid var(--bd2);color:var(--t1);font-size:17px;cursor:pointer;z-index:9999;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 10px rgba(0,0,0,.35)">🌙</button>
+<script>function _toggleTheme(){const lt=document.body.classList.toggle("lt");document.getElementById("_themeBtn").textContent=lt?"☀️":"🌙";localStorage.setItem("_tai_t",lt?"l":"d");}(function(){if(localStorage.getItem("_tai_t")==="l"){document.body.classList.add("lt");const b=document.getElementById("_themeBtn");if(b)b.textContent="☀️";}})();</script>
+</body>
+</html>

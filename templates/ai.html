@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>TradeAI — AI Lab</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg0:#060D18;--bg1:#0B1422;--bg2:#101C2E;--bg3:#162338;
+  --bd:rgba(255,255,255,.07);--bd2:rgba(255,255,255,.14);
+  --t1:#DDE8F5;--t2:#7A8CA0;--t3:#3A4D63;
+  --g:#00C48C;--g2:#00A878;--gbg:rgba(0,196,140,.11);
+  --r:#E05555;--r2:#C0392B;--rbg:rgba(224,85,85,.11);
+  --am:#F0A82A;--abg:rgba(240,168,42,.11);
+  --ac:#3B82F6;--acbg:rgba(59,130,246,.13);
+  --pu:#8B5CF6;--pubg:rgba(155,114,255,.12);
+  --font:"Inter",-apple-system,sans-serif;--mono:"IBM Plex Mono","Courier New",monospace;
+}
+body{font-family:var(--font);background:var(--bg0);color:var(--t1);min-height:100vh;display:flex;flex-direction:column}
+::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:var(--bg1)}::-webkit-scrollbar-thumb{background:var(--bd2);border-radius:2px}
+a{text-decoration:none;color:inherit}
+
+.nav{background:var(--bg1);border-bottom:1px solid var(--bd);display:flex;align-items:center;padding:0 20px;height:52px;gap:12px;flex-shrink:0}
+.nav::after{content:'';position:absolute;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--g),var(--ac),var(--pu));opacity:.8;bottom:0}
+.nav{position:relative}
+.logo{display:flex;align-items:center;gap:8px}
+.logo-icon{width:30px;height:30px;background:var(--g);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:15px}
+.logo-txt{font-size:16px;font-weight:800;letter-spacing:-.4px}.logo-txt span{color:var(--g)}
+.nav-links{display:flex;gap:2px;margin-left:16px}
+.nl{padding:6px 12px;border-radius:8px;font-size:12px;font-weight:600;color:var(--t2);cursor:pointer;transition:.15s}
+.nl:hover,.nl.on{background:var(--bg3);color:var(--t1)}.nl.on{color:var(--g)}
+.nav-sp{flex:1}
+.ai-badge{padding:3px 10px;background:var(--pubg);border:1px solid var(--pu);border-radius:20px;font-size:10px;font-weight:700;color:var(--pu)}
+
+/* MAIN LAYOUT */
+.ai-body{display:grid;grid-template-columns:300px 1fr 300px;height:calc(100vh - 52px);overflow:hidden}
+
+/* LEFT: Quick analysis panel */
+.left-panel{background:var(--bg1);border-right:1px solid var(--bd);display:flex;flex-direction:column;overflow:hidden}
+.panel-hdr{padding:12px 14px;border-bottom:1px solid var(--bd);font-size:11px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.6px;display:flex;align-items:center;gap:7px;flex-shrink:0}
+.quick-inp{padding:10px;border-bottom:1px solid var(--bd);flex-shrink:0}
+.quick-inp input{width:100%;background:var(--bg2);border:1px solid var(--bd2);color:var(--t1);padding:7px 10px;border-radius:8px;font-size:12px;font-family:var(--font);outline:none}
+.quick-inp input:focus{border-color:var(--ac)}
+.quick-inp input::placeholder{color:var(--t3)}
+.quick-btn{margin-top:6px;display:flex;gap:5px}
+.qb{flex:1;padding:7px;border:none;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;font-family:var(--font);transition:.15s}
+.qb.green{background:var(--ac);color:#fff}.qb.green:hover{background:var(--pu)}
+.qb.blue{background:var(--acbg);border:1px solid var(--ac);color:var(--ac)}.qb.blue:hover{background:rgba(59,130,246,.2)}
+.quick-list{flex:1;overflow-y:auto;padding:8px}
+.quick-item{background:var(--bg2);border:1px solid var(--bd);border-radius:9px;padding:10px 12px;margin-bottom:6px;cursor:pointer;transition:.15s}
+.quick-item:hover{border-color:var(--bd2)}
+.qi-sym{font-size:12px;font-weight:800;font-family:var(--mono)}
+.qi-dir{font-size:10px;font-weight:700;margin-top:3px}
+.qi-conf{font-size:9px;color:var(--t3);margin-top:1px}
+.qi-sigs{display:flex;flex-direction:column;gap:2px;margin-top:5px}
+.qi-sig{font-size:9px;color:var(--t2);padding:2px 6px;background:var(--bg1);border-radius:3px}
+
+/* CENTER: AI Chat */
+.chat-panel{display:flex;flex-direction:column;overflow:hidden;background:var(--bg0)}
+.chat-messages{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:14px}
+.chat-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:16px;color:var(--t3)}
+.chat-empty-icon{font-size:48px;opacity:.2}
+.chat-empty h2{font-size:18px;font-weight:800;color:var(--t2)}
+.chat-empty p{font-size:12px;text-align:center;line-height:1.6;max-width:360px}
+.chat-chips{display:flex;gap:6px;flex-wrap:wrap;justify-content:center}
+.chip{padding:6px 14px;background:var(--bg1);border:1px solid var(--bd2);border-radius:20px;font-size:11px;color:var(--t2);cursor:pointer;transition:.15s}
+.chip:hover{border-color:var(--ac);color:var(--ac)}
+
+/* Message bubbles */
+.msg{display:flex;gap:10px;max-width:85%;animation:fadeIn .25s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.msg.user{align-self:flex-end;flex-direction:row-reverse}
+.msg-avatar{width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0}
+.msg.ai .msg-avatar{background:linear-gradient(135deg,var(--pu),var(--ac))}
+.msg.user .msg-avatar{background:var(--bg3)}
+.msg-bubble{padding:10px 14px;border-radius:12px;font-size:12px;line-height:1.6}
+.msg.ai .msg-bubble{background:var(--bg1);border:1px solid var(--bd);border-radius:4px 12px 12px 12px}
+.msg.user .msg-bubble{background:var(--bg3);border:1px solid var(--bd2);border-radius:12px 4px 12px 12px}
+.msg-bubble strong{color:var(--ac)}
+.msg-bubble .bull{color:var(--g)}.msg-bubble .bear{color:var(--r)}.msg-bubble .neu{color:var(--am)}
+.typing-dot{display:inline-block;width:6px;height:6px;background:var(--t3);border-radius:50%;animation:typing .9s infinite;margin:0 1px}
+.typing-dot:nth-child(2){animation-delay:.15s}.typing-dot:nth-child(3){animation-delay:.3s}
+@keyframes typing{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-5px)}}
+
+/* Chat input */
+.chat-input-wrap{padding:14px 20px;border-top:1px solid var(--bd);background:var(--bg1);flex-shrink:0}
+.chat-input-row{display:flex;gap:8px;align-items:flex-end}
+.chat-input{flex:1;background:var(--bg2);border:1px solid var(--bd2);color:var(--t1);padding:10px 14px;border-radius:12px;font-size:13px;font-family:var(--font);outline:none;resize:none;min-height:42px;max-height:120px;line-height:1.5}
+.chat-input:focus{border-color:var(--pu)}
+.chat-input::placeholder{color:var(--t3)}
+.send-btn{width:42px;height:42px;background:linear-gradient(135deg,var(--pu),var(--ac));border:none;border-radius:10px;color:#fff;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:.15s;flex-shrink:0}
+.send-btn:hover{opacity:.85}
+.send-btn:disabled{opacity:.4;cursor:not-allowed}
+.chat-hint{font-size:10px;color:var(--t3);margin-top:6px;text-align:center}
+
+/* RIGHT: Multi-TF signals */
+.right-panel{background:var(--bg1);border-left:1px solid var(--bd);display:flex;flex-direction:column;overflow:hidden}
+.tf-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:10px}
+.tf-card{background:var(--bg2);border:1px solid var(--bd);border-radius:8px;padding:8px;cursor:pointer;transition:.15s;text-align:center}
+.tf-card:hover{border-color:var(--bd2)}
+.tf-card.bull{border-color:var(--g2);background:var(--gbg)}
+.tf-card.bear{border-color:var(--r2);background:var(--rbg)}
+.tf-card.side{border-color:#856404;background:var(--abg)}
+.tf-tf{font-size:9px;color:var(--t3);font-family:var(--mono);font-weight:700;text-transform:uppercase;margin-bottom:3px}
+.tf-dir{font-size:11px;font-weight:800;letter-spacing:.3px}
+.tf-conf{font-size:9px;color:var(--t3);margin-top:2px;font-family:var(--mono)}
+.signal-log{flex:1;overflow-y:auto;padding:10px}
+.slog-item{background:var(--bg2);border:1px solid var(--bd);border-radius:8px;padding:8px 10px;margin-bottom:5px;font-size:10px}
+.slog-sym{font-size:11px;font-weight:800;font-family:var(--mono);margin-bottom:3px}
+.slog-sigs{display:flex;flex-direction:column;gap:1px}
+.spin{display:inline-block;width:14px;height:14px;border:2px solid var(--bd2);border-top-color:var(--pu);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:4px}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* Light theme */
+body.lt{--bg0:#EFF3FB;--bg1:#FFFFFF;--bg2:#F5F8FE;--bg3:#E8EFF8;--bd:rgba(0,0,0,.09);--bd2:rgba(0,0,0,.17);--t1:#17243A;--t2:#4A5E78;--t3:#94A3B8}
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="logo"><div class="logo-icon">📈</div><div class="logo-txt">Trade<span>AI</span></div></div>
+  <div class="nav-links">
+    <a class="nl" href="/dashboard">Dashboard</a>
+    <a class="nl" href="/">Chart</a>
+    <a class="nl" href="/stocks">Stocks</a>
+    <a class="nl" href="/options">Options</a>
+    <a class="nl" href="/newspage">News</a>
+    <a class="nl on" href="/ai">AI Lab</a>
+  </div>
+  <div class="nav-sp"></div>
+  <div class="ai-badge">✨ Powered by Claude</div>
+</nav>
+
+<div class="ai-body">
+
+  <!-- LEFT: Quick analysis -->
+  <div class="left-panel">
+    <div class="panel-hdr"><span style="color:var(--g)">⚡</span>Quick AI Scan</div>
+    <div class="quick-inp">
+      <input id="scanSym" type="text" placeholder="Symbol: NIFTY, RELIANCE…" onkeydown="if(event.key==='Enter')quickScan()">
+      <div class="quick-btn">
+        <button class="qb green" onclick="quickScan()">Scan Now</button>
+        <button class="qb blue" onclick="scanAllTF()">All TF</button>
+      </div>
+    </div>
+    <div class="quick-list" id="quickList">
+      <div style="padding:20px;text-align:center;color:var(--t3);font-size:11px">Enter a symbol and scan</div>
+    </div>
+  </div>
+
+  <!-- CENTER: AI Chat -->
+  <div class="chat-panel">
+    <div class="chat-messages" id="chatBox">
+      <div class="chat-empty" id="chatEmpty">
+        <div class="chat-empty-icon">🤖</div>
+        <h2>TradeAI Assistant</h2>
+        <p>Ask me anything about stocks, options, technical analysis, or market trends. I'll give you professional-grade insights.</p>
+        <div class="chat-chips">
+          <div class="chip" onclick="sendChip(this)">Analyze NIFTY outlook</div>
+          <div class="chip" onclick="sendChip(this)">Explain PCR and how to use it</div>
+          <div class="chip" onclick="sendChip(this)">What is Max Pain in options?</div>
+          <div class="chip" onclick="sendChip(this)">Best indicators for intraday trading</div>
+          <div class="chip" onclick="sendChip(this)">How to read Supertrend signals</div>
+          <div class="chip" onclick="sendChip(this)">Explain Fibonacci retracement</div>
+        </div>
+      </div>
+    </div>
+    <div class="chat-input-wrap">
+      <div class="chat-input-row">
+        <textarea class="chat-input" id="chatInp" placeholder="Ask anything about markets, stocks, options, technicals…" rows="1" onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+        <button class="send-btn" id="sendBtn" onclick="sendMsg()">➤</button>
+      </div>
+      <div class="chat-hint">Claude AI · Shift+Enter for new line · Free-form market questions</div>
+    </div>
+  </div>
+
+  <!-- RIGHT: Multi-TF signals -->
+  <div class="right-panel">
+    <div class="panel-hdr"><span style="color:var(--am)">⏱</span>Multi-TF Signals</div>
+    <div id="tfSymLabel" style="padding:6px 10px;font-size:10px;color:var(--t3);border-bottom:1px solid var(--bd);flex-shrink:0">No symbol loaded</div>
+    <div class="tf-grid" id="tfGrid">
+      ${["1m","3m","5m","15m","30m","1H"].map(tf=>`<div class="tf-card"><div class="tf-tf">${tf}</div><div class="tf-dir" style="color:var(--t3)">—</div><div class="tf-conf">—</div></div>`).join("")}
+    </div>
+    <div class="panel-hdr" style="border-top:1px solid var(--bd)"><span style="color:var(--pu)">📋</span>Signal Log</div>
+    <div class="signal-log" id="signalLog">
+      <div style="color:var(--t3);font-size:11px;text-align:center;padding:10px">Signals will appear here</div>
+    </div>
+  </div>
+
+</div><!-- ai-body -->
+
+<script>
+const enc = s => encodeURIComponent(s);
+let isSending = false;
+let chatHistory = [];
+const TFS = ["1m","3m","5m","15m","30m","60m"];
+const TF_LABELS = ["1m","3m","5m","15m","30m","1H"];
+let currentSym = "";
+
+function autoResize(el) {
+  el.style.height = "auto";
+  el.style.height = Math.min(el.scrollHeight, 120) + "px";
+}
+
+function handleKey(e) {
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMsg(); }
+}
+
+function sendChip(el) {
+  document.getElementById("chatInp").value = el.textContent;
+  sendMsg();
+}
+
+function addMsg(role, html) {
+  const empty = document.getElementById("chatEmpty");
+  if (empty) empty.remove();
+  const box = document.getElementById("chatBox");
+  const div = document.createElement("div");
+  div.className = "msg " + (role==="user"?"user":"ai");
+  div.innerHTML = `
+    <div class="msg-avatar">${role==="user"?"👤":"🤖"}</div>
+    <div class="msg-bubble">${html}</div>
+  `;
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+  return div;
+}
+
+function formatAIReply(text) {
+  return text
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\b(BULLISH|BUY CALL|BUY)\b/g, '<span class="bull">$1</span>')
+    .replace(/\b(BEARISH|BUY PUT|SELL)\b/g, '<span class="bear">$1</span>')
+    .replace(/\b(SIDEWAYS|NEUTRAL|HOLD)\b/g, '<span class="neu">$1</span>')
+    .replace(/\n/g, '<br>');
+}
+
+async function sendMsg() {
+  const inp = document.getElementById("chatInp");
+  const text = inp.value.trim();
+  if (!text || isSending) return;
+  isSending = true;
+  document.getElementById("sendBtn").disabled = true;
+  inp.value = ""; inp.style.height = "auto";
+
+  addMsg("user", text);
+  chatHistory.push({role:"user", content:text});
+
+  const typingDiv = addMsg("ai", `<span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span>`);
+
+  try {
+    const sysPrompt = `You are TradeAI, a professional stock market analyst and derivatives trader specializing in Indian markets (NSE/BSE), options trading, and technical analysis. You provide concise, actionable insights. Use markdown-style bold for key terms. When discussing directions use BULLISH, BEARISH, SIDEWAYS. Keep responses focused and professional. If asked about a specific stock or index, give a structured analysis with direction, key levels, and trade suggestion. Current market: Indian stock markets.`;
+
+    const resp = await fetch("/api/chat", {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({system: sysPrompt, messages: chatHistory})
+    });
+    const data = await resp.json();
+    if(data.error&&!data.content){throw new Error(data.error);}
+    const reply = (data.content||[]).map(b=>b.text||"").join("") || "No response.";
+    chatHistory.push({role:"assistant", content:reply});
+    typingDiv.querySelector(".msg-bubble").innerHTML = formatAIReply(reply);
+  } catch(e) {
+    typingDiv.querySelector(".msg-bubble").innerHTML = `<span style="color:var(--r)">⚠️ AI unavailable: ${e.message}</span>`;
+  }
+  isSending = false;
+  document.getElementById("sendBtn").disabled = false;
+  document.getElementById("chatBox").scrollTop = document.getElementById("chatBox").scrollHeight;
+}
+
+// Quick scan
+async function quickScan() {
+  const sym = document.getElementById("scanSym").value.trim() || "^NSEI";
+  currentSym = sym;
+  document.getElementById("tfSymLabel").textContent = `Symbol: ${sym}`;
+  document.getElementById("quickList").innerHTML = `<div style="padding:16px;text-align:center;color:var(--t3);font-size:11px"><span class="spin"></span>Analysing ${sym}…</div>`;
+
+  try {
+    const d = await fetch(`/predict?symbol=${enc(sym)}&interval=5m`).then(r=>r.json());
+    if (d.error) { document.getElementById("quickList").innerHTML=`<div style="padding:10px;color:var(--r);font-size:11px">⚠️ ${d.error}</div>`; return; }
+
+    const col = d.direction==="BULLISH"?"var(--g)":d.direction==="BEARISH"?"var(--r)":"var(--am)";
+    document.getElementById("quickList").innerHTML = `
+      <div class="quick-item">
+        <div class="qi-sym">${sym.replace(".NS","").replace("^","")}</div>
+        <div class="qi-dir" style="color:${col}">${d.direction} · ${d.confidence}%</div>
+        <div class="qi-conf">Score ${d.score}/10 · RSI ${d.rsi}</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:6px">
+          <div style="background:rgba(0,208,156,.1);border:1px solid #00A87C;border-radius:5px;padding:4px 6px;text-align:center">
+            <div style="font-size:7px;color:var(--g);text-transform:uppercase;font-weight:700">Entry</div>
+            <div style="font-size:10px;font-weight:800;font-family:var(--mono);color:var(--g)">${d.entryDisplay}</div>
+          </div>
+          <div style="background:rgba(244,94,109,.1);border:1px solid #D14059;border-radius:5px;padding:4px 6px;text-align:center">
+            <div style="font-size:7px;color:var(--r);text-transform:uppercase;font-weight:700">Stop Loss</div>
+            <div style="font-size:10px;font-weight:800;font-family:var(--mono);color:var(--r)">${d.slDisplay}</div>
+          </div>
+        </div>
+        <div class="qi-sigs">${(d.signals||[]).slice(0,4).map(s=>`<div class="qi-sig">${s.icon} ${s.text}</div>`).join("")}</div>
+        <div style="margin-top:5px;font-size:9px;color:var(--t3)">${d.macroTrend||""}</div>
+      </div>
+    `;
+    addToLog(sym, d);
+    loadMultiTF(sym);
+  } catch(e) {
+    document.getElementById("quickList").innerHTML=`<div style="padding:10px;color:var(--r);font-size:11px">⚠️ ${e.message}</div>`;
+  }
+}
+
+async function scanAllTF() {
+  const sym = document.getElementById("scanSym").value.trim() || "^NSEI";
+  await loadMultiTF(sym);
+}
+
+async function loadMultiTF(sym) {
+  document.getElementById("tfSymLabel").textContent = `Symbol: ${sym}`;
+  const grid = document.getElementById("tfGrid");
+  grid.innerHTML = TF_LABELS.map(tf=>`<div class="tf-card"><div class="tf-tf">${tf}</div><div class="tf-dir" style="color:var(--t3)"><span class="spin" style="width:10px;height:10px;border-width:1.5px"></span></div><div class="tf-conf">—</div></div>`).join("");
+
+  const cards = grid.querySelectorAll(".tf-card");
+  for (let i=0;i<TFS.length;i++) {
+    const tf = TFS[i];
+    try {
+      const d = await fetch(`/predict?symbol=${enc(sym)}&interval=${tf}`).then(r=>r.json());
+      if (d && !d.error) {
+        const cls = d.direction==="BULLISH"?"bull":d.direction==="BEARISH"?"bear":"side";
+        const col = d.direction==="BULLISH"?"#00D09C":d.direction==="BEARISH"?"#F45E6D":"#FFB84D";
+        cards[i].className = "tf-card "+cls;
+        cards[i].innerHTML = `<div class="tf-tf">${TF_LABELS[i]}</div><div class="tf-dir" style="color:${col}">${d.direction}</div><div class="tf-conf">${d.confidence}%</div>`;
+      } else {
+        cards[i].innerHTML = `<div class="tf-tf">${TF_LABELS[i]}</div><div class="tf-dir" style="color:var(--t3)">—</div><div class="tf-conf">No data</div>`;
+      }
+    } catch(e) {
+      cards[i].innerHTML = `<div class="tf-tf">${TF_LABELS[i]}</div><div class="tf-dir" style="color:var(--t3)">ERR</div><div class="tf-conf">—</div>`;
+    }
+  }
+}
+
+function addToLog(sym, d) {
+  const log = document.getElementById("signalLog");
+  const col = d.direction==="BULLISH"?"#00D09C":d.direction==="BEARISH"?"#F45E6D":"#FFB84D";
+  const now = new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"});
+  const item = document.createElement("div");
+  item.className = "slog-item";
+  item.innerHTML = `
+    <div class="slog-sym" style="color:${col}">${sym.replace(".NS","").replace("^","")} <span style="font-size:8px;color:var(--t3)">${now}</span></div>
+    <div style="font-size:9px;color:${col};font-weight:700">${d.direction} · ${d.confidence}% · Score ${d.score}/10</div>
+    <div class="slog-sigs">${(d.signals||[]).slice(0,3).map(s=>`<div style="font-size:9px;color:var(--t2);padding:1px 0">${s.icon} ${s.text}</div>`).join("")}</div>
+  `;
+  const existing = log.querySelector("div[style*='No signal']") || log.querySelector(".slog-item ~ div");
+  log.innerHTML = "";
+  log.appendChild(item);
+}
+
+// Initial state
+document.getElementById("chatInp").addEventListener("input", function() { autoResize(this); });
+</script>
+
+<button id="_themeBtn" onclick="_toggleTheme()" style="position:fixed;bottom:20px;right:16px;width:40px;height:40px;border-radius:50%;background:var(--bg1);border:1px solid var(--bd2);color:var(--t1);font-size:17px;cursor:pointer;z-index:9999;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 10px rgba(0,0,0,.35)">🌙</button>
+<script>function _toggleTheme(){const lt=document.body.classList.toggle("lt");document.getElementById("_themeBtn").textContent=lt?"☀️":"🌙";localStorage.setItem("_tai_t",lt?"l":"d");}(function(){if(localStorage.getItem("_tai_t")==="l"){document.body.classList.add("lt");const b=document.getElementById("_themeBtn");if(b)b.textContent="☀️";}})();</script>
+</body>
+</html>

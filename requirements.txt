@@ -1,0 +1,12 @@
+flask==3.0.3
+yfinance==0.2.51
+pandas==2.2.2
+numpy==1.26.4
+requests==2.32.3
+gunicorn==22.0.0
+gevent==24.2.1
+greenlet==3.0.3
+anthropic==0.34.2
+scikit-learn==1.5.1
+ta==0.11.0
+plotly==5.24.1

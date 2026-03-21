@@ -1,0 +1,55 @@
+/* style.css — TradeAI
+   All core styles are now in index.html <style>.
+   This file is kept for any overrides or additions.
+*/
+
+/* Dashboard, stocks, news, ai, options pages can use this */
+body {
+  font-family: 'Inter', -apple-system, sans-serif;
+  background: #060D18;
+  color: #E8EEF7;
+  margin: 0;
+}
+
+/* Generic page wrapper for other templates */
+.page-wrap {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 32px 20px;
+}
+
+h1, h2, h3 {
+  font-weight: 700;
+  color: #E8EEF7;
+}
+
+a { color: var(--g, #00B386); text-decoration: none; }
+a:hover { opacity: .8; }
+
+.card {
+  background: #0B1422;
+  border: 1px solid rgba(255,255,255,.07);
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 16px;
+}
+
+.btn {
+  padding: 10px 20px;
+  background: #00B386;
+  border: none;
+  border-radius: 8px;
+  color: #000;
+  font-weight: 700;
+  cursor: pointer;
+  font-size: 14px;
+  transition: opacity .2s;
+}
+.btn:hover { opacity: .85; }
+
+.green { color: #00B386; }
+.red   { color: #E04F4F; }
+.amber { color: #F0A020; }
+/* Dhan sidebar offset for non-index pages */
+body { margin-left: 0; }
+.page-wrap { margin-left: 54px !important; padding-top: 56px; }
