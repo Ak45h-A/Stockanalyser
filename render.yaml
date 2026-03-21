@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: tradeai
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn -w 1 -k gevent --worker-connections 500 --timeout 120 --keep-alive 5 -b 0.0.0.0:$PORT app:app
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: ANTHROPIC_API_KEY
+        sync: false        # you'll paste this in the Render dashboard
+    healthCheckPath: /
+    autoDeploy: true       # re-deploys every time you push to GitHub
