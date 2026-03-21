@@ -2601,6 +2601,22 @@ function pickSym(sym,name){
   const i=document.createElement("input");i.type="hidden";i.name="company";i.value=sym;
   f.appendChild(i);document.body.appendChild(f);f.submit();
 }
+/* Submit search with any value — used by both desktop and mobile */
+function doSearchVal(v) {
+  v = (v || "").trim();
+  if (!v) return;
+  var f = document.createElement("form");
+  f.method = "POST";
+  f.action = "/";
+  var inp = document.createElement("input");
+  inp.type = "hidden";
+  inp.name = "company";
+  inp.value = v;
+  f.appendChild(inp);
+  document.body.appendChild(f);
+  f.submit();
+}
+
 function doSearch(){
   const v=_siEl.value.trim();if(!v)return;
   const f=document.createElement("form");f.method="POST";f.action="/";
