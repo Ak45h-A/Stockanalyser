@@ -22,7 +22,7 @@
   --font:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;--mono:'IBM Plex Mono','Courier New',monospace;
   --r8:8px;--r12:12px;--shadow:0 4px 24px rgba(0,0,0,.6);
 }
-html,body{height:100%;font-family:var(--font);background:var(--bg0);color:var(--t1);overflow:hidden;font-size:13px;-webkit-font-smoothing:antialiased}
+html,body{height:100%;font-family:var(--font);background:var(--bg0);color:var(--t1);overflow:hidden;font-size:14px;-webkit-font-smoothing:antialiased}
 ::-webkit-scrollbar{width:3px;height:3px}
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:var(--bd2);border-radius:2px}
@@ -39,12 +39,10 @@ html,body{height:100%;font-family:var(--font);background:var(--bg0);color:var(--
   height:calc(100vh - 48px);
   overflow:hidden;
   min-width:0;
-  isolation:isolate;
-  clip-path:inset(0);
 }
 
 /* Every direct child of .body: locked in its grid cell, no overflow */
-.body > *{min-width:0;overflow:hidden;}
+.body > *{min-width:0;}
 /* The chart area (.main) MUST NEVER render wider than its grid column.
    LW Charts v4 autoSize can exceed this — we clip it at the CSS level. */
 .main{
@@ -83,27 +81,39 @@ html,body{height:100%;font-family:var(--font);background:var(--bg0);color:var(--
 }
 
 /* ═══ TOPBAR ═══ */
-.topbar{background:var(--bg1);border-bottom:1px solid var(--bd);display:flex;align-items:center;padding:0 12px;gap:10px;position:relative;z-index:100}
+.topbar{
+  background:var(--bg1);
+  border-bottom:1px solid var(--bd);
+  display:grid;
+  grid-template-columns:auto 1fr auto auto auto auto;
+  align-items:center;
+  padding:0 10px;
+  gap:6px;
+  position:relative;
+  z-index:100;
+  height:48px;
+  overflow:hidden;
+}
 .topbar::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--g),var(--ac),var(--pu));opacity:.8}
 .logo{display:flex;align-items:center;gap:7px;white-space:nowrap;text-decoration:none}
 .logo-icon{width:28px;height:28px;background:var(--g);border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:900;color:#000;font-family:var(--mono);flex-shrink:0}
 .logo-txt{font-size:17px;font-weight:800;letter-spacing:-.4px;color:var(--t1)}
 .logo-txt span{color:var(--g)}
-.belt{flex:1;overflow:hidden;mask-image:linear-gradient(90deg,transparent,#000 4%,#000 96%,transparent)}
+.belt{overflow:hidden;min-width:0;mask-image:linear-gradient(90deg,transparent,#000 4%,#000 96%,transparent)}
 .belt-inner{display:flex;gap:16px;animation:belt 45s linear infinite;width:max-content}
 .belt-inner:hover{animation-play-state:paused}
 @keyframes belt{to{transform:translateX(-50%)}}
-.ti{display:flex;align-items:center;gap:5px;font-size:11px;white-space:nowrap;cursor:pointer}
+.ti{display:flex;align-items:center;gap:5px;font-size:12px;white-space:nowrap;cursor:pointer}
 .ti:hover{opacity:.8}
 .ti-n{font-size:10px;color:var(--t3);font-family:var(--mono)}
-.ti-p{font-weight:600;font-family:var(--mono);font-size:11px}
+.ti-p{font-weight:600;font-family:var(--mono);font-size:12px}
 .ti-c{font-size:9px;padding:1px 5px;border-radius:3px;font-weight:700}
 .ti-c.up{color:var(--g);background:var(--gbg)}
 .ti-c.dn{color:var(--r);background:var(--rbg)}
 .mkt-pill{font-size:10px;padding:3px 10px;border-radius:20px;font-weight:700;border:1px solid;white-space:nowrap;flex-shrink:0}
 .mkt-pill.open{color:var(--g);border-color:var(--g);background:var(--gbg)}
 .mkt-pill.closed{color:var(--t3);border-color:var(--t3)}
-.hdr-chg{font-size:11px;padding:2px 7px;border-radius:4px;font-family:var(--mono);font-weight:600;flex-shrink:0}
+.hdr-chg{font-size:12px;padding:2px 7px;border-radius:4px;font-family:var(--mono);font-weight:600;flex-shrink:0}
 .hdr-chg.up{color:var(--g);background:var(--gbg)}
 .hdr-chg.dn{color:var(--r);background:var(--rbg)}
 
@@ -140,19 +150,19 @@ html,body{height:100%;font-family:var(--font);background:var(--bg0);color:var(--
 .sc-sym{font-size:16px;font-weight:800;font-family:var(--mono);letter-spacing:-.3px}
 .sc-ex{font-size:9px;color:var(--t3);margin-top:1px;text-transform:uppercase;letter-spacing:.5px}
 .sc-prow{display:flex;align-items:baseline;gap:8px;margin-top:8px;flex-wrap:wrap}
-.sc-p{font-size:26px;font-weight:800;font-family:var(--mono);letter-spacing:-.5px}
+.sc-p{font-size:28px;font-weight:800;font-family:var(--mono);letter-spacing:-.5px}
 .sc-chg{font-size:11px;padding:2px 7px;border-radius:5px;font-weight:700}
 .sc-chg.up{color:var(--g);background:var(--gbg)}
 .sc-chg.dn{color:var(--r);background:var(--rbg)}
 .kv-grid{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--bd)}
 .kv{background:var(--bg1);padding:6px 10px}
 .kv-l{font-size:8px;color:var(--t3);text-transform:uppercase;letter-spacing:.6px}
-.kv-v{font-size:13px;font-weight:700;font-family:var(--mono);margin-top:2px}
+.kv-v{font-size:14px;font-weight:700;font-family:var(--mono);margin-top:2px}
 
 /* Nav menu */
 .navmenu{padding:6px;overflow-y:auto;flex:1}
 .nsec{font-size:8px;color:var(--t3);text-transform:uppercase;letter-spacing:1px;padding:8px 8px 3px;font-weight:700}
-.ni{display:flex;align-items:center;gap:8px;padding:7px 9px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--t2);transition:.2s;font-weight:500}
+.ni{display:flex;align-items:center;gap:8px;padding:7px 9px;border-radius:8px;cursor:pointer;font-size:13px;color:var(--t2);transition:.2s;font-weight:500}
 .ni:hover,.ni.on{background:var(--bg3);color:var(--t1)}
 .ni.on{color:var(--g)}
 .ni-ic{font-size:13px;width:16px;text-align:center;flex-shrink:0}
@@ -163,7 +173,7 @@ html,body{height:100%;font-family:var(--font);background:var(--bg0);color:var(--
 /* Chart header */
 .chart-hdr{padding:0 6px;background:var(--bg1);border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:3px;flex-wrap:nowrap;min-height:38px;overflow:hidden;flex-shrink:0}
 .tabs{display:flex;gap:1px;background:var(--bg2);padding:2px;border-radius:8px;flex-shrink:0;overflow-x:auto;max-width:310px}.tabs::-webkit-scrollbar{height:0}
-.tab{padding:5px 11px;border:none;background:none;color:var(--t3);font-size:12px;font-weight:700;border-radius:6px;cursor:pointer;font-family:var(--font);transition:.2s;white-space:nowrap}
+.tab{padding:5px 11px;border:none;background:none;color:var(--t3);font-size:13px;font-weight:700;border-radius:6px;cursor:pointer;font-family:var(--font);transition:.2s;white-space:nowrap}
 .tab.on{background:var(--g);color:#000;font-weight:800}
 .tfs{display:flex;gap:2px;flex-shrink:0;overflow-x:auto;max-width:260px}.tfs::-webkit-scrollbar{height:0}
 .tf{padding:4px 9px;border:none;background:var(--bg2);color:var(--t3);font-size:11px;font-weight:700;border-radius:5px;cursor:pointer;font-family:var(--mono);transition:.15s}
@@ -239,8 +249,8 @@ html,body{height:100%;font-family:var(--font);background:var(--bg0);color:var(--
 .box-v{font-size:14px;font-weight:800;font-family:var(--mono)}
 .e-box .box-v{color:var(--g)}.sl-box .box-v{color:var(--r)}
 .sig-list{display:flex;flex-direction:column;gap:2px}
-.sig-item{font-size:11px;color:var(--t2);padding:4px 9px;background:var(--bg2);border-radius:5px;line-height:1.4;border-left:2px solid var(--bd2)}
-.macro{background:var(--bg2);border-radius:7px;padding:7px 10px;font-size:11px;color:var(--t2);line-height:1.5;border:1px solid var(--bd)}
+.sig-item{font-size:12px;color:var(--t2);padding:4px 9px;background:var(--bg2);border-radius:5px;line-height:1.4;border-left:2px solid var(--bd2)}
+.macro{background:var(--bg2);border-radius:7px;padding:7px 10px;font-size:12px;color:var(--t2);line-height:1.5;border:1px solid var(--bd)}
 
 /* TF Prediction grid */
 .tf-pred-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:5px}
@@ -288,7 +298,7 @@ html,body{height:100%;font-family:var(--font);background:var(--bg0);color:var(--
 .news-item{display:flex;gap:10px;padding:10px 12px;border-bottom:1px solid var(--bd);text-decoration:none;transition:.15s}
 .news-item:hover{background:var(--bg2)}
 .news-thumb{width:54px;height:40px;border-radius:5px;object-fit:cover;flex-shrink:0;background:var(--bg3)}
-.news-title{font-size:11px;color:var(--t1);line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin-bottom:2px}
+.news-title{font-size:12px;color:var(--t1);line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin-bottom:2px}
 .news-meta{font-size:9px;color:var(--t3);display:flex;gap:6px}
 
 /* Projected chart wrapper */
@@ -297,7 +307,7 @@ html,body{height:100%;font-family:var(--font);background:var(--bg0);color:var(--
 #proj-div{height:150px;position:relative;overflow:hidden}
 
 /* Zone 1: AI Signal — capped height, scrollable */
-.rp-z1{border-bottom:1px solid var(--bd);padding:10px 12px;min-height:0;overflow-y:auto;max-height:none;flex-shrink:0}
+.rp-z1{border-bottom:1px solid var(--bd);padding:10px 12px;min-height:0;overflow-y:auto;max-height:50vh;flex-shrink:0}
 /* Zone 2: Forecast mini chart — fixed, never grows */
 .rp-z2{border-bottom:1px solid var(--bd);padding:10px 12px;min-height:0;overflow:hidden;flex-shrink:0;max-height:140px}
 /* Zone 3: AI Options Analysis — fills ALL remaining space, scrollable */
@@ -316,11 +326,11 @@ html,body{height:100%;font-family:var(--font);background:var(--bg0);color:var(--
 .rp-tgt{display:grid;grid-template-columns:1fr 1fr;gap:4px;margin:5px 0}
 .rp-tc{background:var(--bg2);border:1px solid var(--bd);border-radius:6px;padding:5px;text-align:center}
 .rp-tl{font-size:9px;color:var(--t3);text-transform:uppercase;font-weight:700}
-.rp-tv{font-size:11px;font-weight:800;font-family:var(--mono);margin-top:1px}
+.rp-tv{font-size:12px;font-weight:800;font-family:var(--mono);margin-top:1px}
 .rp-esl{display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:5px}
 .rp-sig-list{display:flex;flex-direction:column;gap:2px}
-.rp-sig-item{font-size:11px;color:var(--t2);padding:4px 8px;background:var(--bg2);border-radius:4px;line-height:1.4;border-left:2px solid var(--bd2)}
-.rp-macro{background:var(--bg2);border-radius:5px;padding:6px 10px;font-size:11px;color:var(--t2);line-height:1.4;margin-top:4px;border:1px solid var(--bd)}
+.rp-sig-item{font-size:12px;color:var(--t2);padding:4px 8px;background:var(--bg2);border-radius:4px;line-height:1.4;border-left:2px solid var(--bd2)}
+.rp-macro{background:var(--bg2);border-radius:5px;padding:6px 10px;font-size:12px;color:var(--t2);line-height:1.4;margin-top:4px;border:1px solid var(--bd)}
 
 /* Forecast mini chart in zone 2 */
 .mini-wrap{position:relative;height:82px;margin-bottom:5px}
@@ -345,7 +355,7 @@ html,body{height:100%;font-family:var(--font);background:var(--bg0);color:var(--
 .oa-row{display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:5px}
 .oa-cell{background:var(--bg2);border:1px solid var(--bd);border-radius:7px;padding:6px 8px}
 .oa-cl{font-size:7px;color:var(--t3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px;font-weight:700}
-.oa-cv{font-size:11px;font-weight:800;font-family:var(--mono)}
+.oa-cv{font-size:12px;font-weight:800;font-family:var(--mono)}
 .oa-cv.g{color:var(--g)}.oa-cv.r{color:var(--r)}.oa-cv.a{color:var(--am)}.oa-cv.b{color:var(--ac)}
 .oa-trade{background:var(--bg2);border:1px solid var(--bd2);border-radius:9px;padding:9px 11px;margin-bottom:5px}
 .oa-trade-lbl{font-size:7px;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;font-weight:700}
@@ -525,19 +535,181 @@ html,body{height:100%;font-family:var(--font);background:var(--bg0);color:var(--
 @media(max-width:1000px){.body{grid-template-columns:44px 180px minmax(0,1fr) 260px}.rpanel{width:260px!important;min-width:260px!important;max-width:260px!important}}
 /* Laptop fix: ensure rpanel always visible and scrollable */
 @media(min-width:601px){
-  .rpanel{display:flex!important;flex-direction:column;visibility:visible!important;opacity:1!important;overflow-y:auto!important}
-  .rp-z1{max-height:45vh!important;overflow-y:auto!important;flex-shrink:0!important}
-  .rp-z2{max-height:150px!important;flex-shrink:0!important}
+  /* Desktop/laptop: ensure clock always visible */
+  .hdr-clock{display:flex!important;visibility:visible!important;opacity:1!important}
+  .mkt-hours{display:flex!important;visibility:visible!important;opacity:1!important}
+  .rpanel{display:flex!important;flex-direction:column!important;visibility:visible!important;opacity:1!important}
+  .rp-z1{max-height:42vh!important;overflow-y:auto!important;flex-shrink:0!important}
+  .rp-z2{max-height:145px!important;flex-shrink:0!important}
   .rp-z3{flex:1!important;overflow-y:auto!important;min-height:80px!important}
 }
 /* Laptop fix: ensure rpanel always visible and scrollable */
 @media(min-width:601px){
-  .rpanel{display:flex!important;flex-direction:column;visibility:visible!important;opacity:1!important;overflow-y:auto!important}
-  .rp-z1{max-height:45vh!important;overflow-y:auto!important;flex-shrink:0!important}
-  .rp-z2{max-height:150px!important;flex-shrink:0!important}
-  .rp-z3{flex:1!important;overflow-y:auto!important;min-height:80px!important}
+  .rpanel{display:flex!important;flex-direction:column;visibility:visible!important;opacity:1!important;overflow-y:hidden!important}
+  .rp-z1{max-height:42vh!important;overflow-y:auto!important;flex-shrink:0!important}
+  .rp-z2{max-height:145px!important;flex-shrink:0!important}
+  .rp-z3{flex:1!important;overflow-y:auto!important;min-height:80px!important;min-width:0!important}
 }
 @media(max-width:780px){.body{grid-template-columns:0 0 minmax(0,1fr) 220px}.sidebar,.inav{display:none!important}.rpanel{width:220px!important;min-width:220px!important;max-width:220px!important}}
+
+/* ── MOBILE SEARCH BAR ── */
+.mob-search{display:none;align-items:center;gap:6px;padding:6px 10px;background:var(--bg1);border-bottom:1px solid var(--bd);position:sticky;top:48px;z-index:99;width:100%;box-sizing:border-box}
+.mob-search input{flex:1;background:var(--bg2);border:1px solid var(--bd2);color:var(--t1);padding:8px 12px;border-radius:9px;font-size:13px;font-family:var(--font);outline:none;min-width:0}
+.mob-search input:focus{border-color:var(--g)}
+.mob-search input::placeholder{color:var(--t3)}
+.mob-search button{background:var(--g);border:none;border-radius:8px;padding:8px 12px;color:#000;font-weight:800;cursor:pointer;font-size:12px;white-space:nowrap;flex-shrink:0}
+
+/* ══ PHONE: full vertical stack ══ */
+@media(max-width:600px){
+  /* ─── FULL MOBILE RESET ─── */
+  *{box-sizing:border-box}
+  html{overflow-x:hidden!important}
+  body{
+    overflow:auto!important;
+    overflow-x:hidden!important;
+    height:auto!important;
+    min-height:100dvh!important;
+  }
+  /* App shell: vertical stack */
+  .app{
+    display:block!important;
+    height:auto!important;
+    overflow:visible!important;
+  }
+  /* Body: single column block - NO grid */
+  .body{
+    display:block!important;
+    height:auto!important;
+    overflow:visible!important;
+    clip-path:none!important;
+    isolation:auto!important;
+  }
+  /* Hide desktop sidebar + icon nav */
+  .sidebar,.inav{display:none!important}
+  /* Main area: full width block */
+  .main{
+    display:block!important;
+    width:100vw!important;
+    max-width:100vw!important;
+    height:auto!important;
+    clip-path:none!important;
+    overflow:visible!important;
+  }
+  /* Chart container fixed height */
+  .cbody{
+    display:block!important;
+    height:270px!important;
+    max-height:270px!important;
+    overflow:hidden!important;
+    width:100vw!important;
+    position:relative!important;
+  }
+  #lwc-main{
+    height:210px!important;
+    width:100%!important;
+    overflow:hidden!important;
+    position:relative!important;
+  }
+  .vol-wrap{height:45px!important;width:100%!important}
+  /* Right panel: full width below chart */
+  .rpanel{
+    display:block!important;
+    width:100vw!important;
+    min-width:100vw!important;
+    max-width:100vw!important;
+    height:auto!important;
+    max-height:none!important;
+    overflow:visible!important;
+    border-left:none!important;
+    border-top:2px solid var(--bd)!important;
+    position:static!important;
+  }
+  .rp-z1,.rp-z2,.rp-z3{
+    max-height:none!important;
+    overflow:visible!important;
+    width:100%!important;
+  }
+  /* Topbar: use flex on mobile, hide clock */
+  .topbar{
+    display:flex!important;
+    grid-template-columns:none!important;
+    padding:0 8px!important;
+    height:48px!important;
+    overflow:hidden!important;
+    gap:6px!important;
+  }
+  .belt{display:none!important}
+  .hdr-clock{display:none!important}
+  .mkt-hours{display:none!important}
+  .hdr-chg{font-size:11px!important}
+  .logo-txt{font-size:14px!important}
+  /* Show mobile search bar */
+  .mob-search{display:flex!important}
+  /* Chart header tabs */
+  .chart-hdr{
+    display:flex!important;
+    flex-wrap:nowrap!important;
+    height:auto!important;
+    min-height:34px!important;
+    padding:2px 4px!important;
+    gap:2px!important;
+    overflow-x:auto!important;
+  }
+  .tabs{
+    overflow-x:auto!important;
+    max-width:none!important;
+    flex-shrink:1!important;
+    background:transparent!important;
+    padding:0!important;
+  }
+  .tab{padding:4px 7px!important;font-size:11px!important}
+  .tfs{overflow-x:auto!important;flex-shrink:1!important}
+  .tf{padding:3px 6px!important;font-size:10px!important}
+  /* Hide non-essential elements */
+  .ohlc-bar,.draw-bar,#liveInd,.sp,.hdr-p{display:none!important}
+  .action-bar{height:34px!important;padding:0 6px!important}
+  /* Fix canvas/chart overflow */
+  canvas{max-width:100%!important}
+  #_themeBtn{bottom:10px!important;right:10px!important;width:34px!important;height:34px!important}
+}
+
+/* ══ LANDSCAPE PHONE ══ */
+@media(max-width:900px) and (orientation:landscape){
+  html,body{overflow:hidden!important;height:100vh!important}
+  .app{display:grid!important;grid-template-rows:48px 1fr!important;height:100vh!important}
+  .body{
+    display:flex!important;
+    flex-direction:row!important;
+    height:calc(100vh - 48px)!important;
+    overflow:hidden!important;
+    grid-template-columns:none!important;
+  }
+  .sidebar,.inav{display:none!important}
+  .main{flex:1!important;max-width:none!important;width:auto!important;height:100%!important;clip-path:none!important;overflow:hidden!important}
+  .cbody{height:calc(100% - 76px)!important;max-height:none!important}
+  #lwc-main{height:calc(100% - 46px)!important}
+  .rpanel{
+    width:220px!important;min-width:220px!important;max-width:220px!important;
+    height:100%!important;overflow-y:auto!important;
+    border-left:1px solid var(--bd)!important;border-top:none!important;
+  }
+  .draw-bar,.ohlc-bar{display:none!important}
+  .mob-search{display:none!important}
+  .hdr-clock{display:flex!important}
+  .mkt-hours{display:flex!important}
+  /* Topbar grid on landscape */
+  .topbar{
+    display:grid!important;
+    grid-template-columns:auto 1fr auto auto auto auto!important;
+  }
+}
+
+@media(max-width:380px){
+  .tab{padding:3px 5px!important;font-size:10px!important}
+  .tf{padding:2px 4px!important;font-size:9px!important}
+  .cbody{height:260px!important}
+  #lwc-main{height:190px!important}
+}
 
 
 /* ── BACK BUTTON ── */
@@ -559,6 +731,43 @@ html,body{height:100%;font-family:var(--font);background:var(--bg0);color:var(--
 .back-btn:hover{border-color:var(--g);color:var(--g);background:var(--gbg)}
 /* Show back button when a symbol is loaded */
 body[data-has="1"] .back-btn{display:flex}
+
+/* ── CLOCK & DATE ── */
+.hdr-clock{
+  display:flex!important;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  line-height:1.2;
+  cursor:default;
+  visibility:visible!important;
+  opacity:1!important;
+  white-space:nowrap;
+  min-width:90px;
+}
+.hdr-time{font-size:13px;font-weight:800;font-family:var(--mono);color:var(--t1);letter-spacing:.5px}
+.hdr-date{font-size:9px;color:var(--t3);font-family:var(--mono);letter-spacing:.3px}
+/* ── MARKET HOURS PILL ── */
+.mkt-hours{
+  display:flex!important;
+  flex-direction:column;
+  align-items:flex-end;
+  gap:1px;
+  visibility:visible!important;
+  white-space:nowrap;
+  min-width:70px;
+}
+.mkt-row{display:flex;align-items:center;gap:4px;font-size:9px;font-family:var(--mono)}
+.mkt-dot{width:5px;height:5px;border-radius:50%;flex-shrink:0}
+.mkt-dot.open{background:var(--g);box-shadow:0 0 4px var(--g)}
+.mkt-dot.closed{background:var(--t3)}
+.mkt-dot.pre{background:var(--am)}
+/* Clock always visible on all screens >= 601px */
+
+/* ── PREMIUM SVG ICONS ── */
+.svg-icon{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
+.inav a svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.ni-ic svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 /* Light theme */
 body.lt{--bg0:#EFF3FB;--bg1:#FFFFFF;--bg2:#F5F8FE;--bg3:#E8EFF8;--bd:rgba(0,0,0,.09);--bd2:rgba(0,0,0,.17);--t1:#17243A;--t2:#4A5E78;--t3:#94A3B8}
 body.lt .topbar::after{opacity:.4}
@@ -581,22 +790,49 @@ body.lt .topbar::after{opacity:.4}
     <div class="logo-txt">Trade<span>AI</span></div>
   </a>
   <div class="belt"><div class="belt-inner" id="ti"></div></div>
+  <!-- Live clock -->
+  <div class="hdr-clock" id="hdrClock">
+    <div class="hdr-time" id="hdrTime">--:--:-- IST</div>
+    <div class="hdr-date" id="hdrDate">--, -- --- ----</div>
+  </div>
+  <!-- Market hours -->
+  <div class="mkt-hours" id="mktHours">
+    <div class="mkt-row"><span class="mkt-dot" id="nseStatusDot"></span><span style="color:var(--t2);font-size:9px">NSE</span>&nbsp;<span id="nseStatusTxt" style="color:var(--t3);font-size:9px">--</span></div>
+    <div class="mkt-row"><span class="mkt-dot" id="usStatusDot"></span><span style="color:var(--t2);font-size:9px">US</span>&nbsp;<span id="usStatusTxt" style="color:var(--t3);font-size:9px">--</span></div>
+  </div>
   <span id="hdrChg" class="hdr-chg"></span>
   <span class="mkt-pill closed" id="mktPill">NSE</span>
 </header>
+
+<!-- ══ MOBILE SEARCH BAR (phones only) ══ -->
+<div class="mob-search" id="mobSearch">
+  <a href="/" style="width:34px;height:34px;flex-shrink:0;border:1px solid var(--bd2);background:var(--bg2);color:var(--t2);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;text-decoration:none">&#8592;</a>
+  <input id="mobSi" type="text" placeholder="Search NIFTY, Reliance, Apple…" autocomplete="off"
+    onkeydown="if(event.key==='Enter'){document.getElementById('si').value=this.value;doSearch()}">
+  <button onclick="document.getElementById('si').value=document.getElementById('mobSi').value;doSearch()">Go</button>
+</div>
 
 <div class="body">
 
 <!-- ══ ICON NAV ══ -->
 <nav class="inav">
-  <a class="on" title="Chart" onclick="showTab('price')">📊</a>
-  <a title="Indicators" onclick="showTab('ind')">📉</a>
-  <a title="AI Predict" onclick="showTab('pred')">🤖</a>
-  <a title="Options" onclick="showTab('opt')">⚙️</a>
-  <a title="TradingView" onclick="showTab('tv')">📺</a>
-  <a title="News" onclick="showTab('news')">📰</a>
+  <a class="on" title="Chart" onclick="showTab('price')">
+    <svg viewBox="0 0 24 24" style="width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></a>
+  <a title="Market" onclick="showTab('mkt')">
+    <svg viewBox="0 0 24 24" style="width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round"><rect x="2" y="3" width="6" height="18" rx="1"/><rect x="9" y="8" width="6" height="13" rx="1"/><rect x="16" y="13" width="6" height="8" rx="1"/></svg></a>
+  <a title="Indicators" onclick="showTab('ind')">
+    <svg viewBox="0 0 24 24" style="width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round"><path d="M3 3v18h18"/><path d="M18 9l-5 5-3-3-5 5"/></svg></a>
+  <a title="AI Signal" onclick="showTab('pred')">
+    <svg viewBox="0 0 24 24" style="width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3m-4.22-7.78-2.12 2.12M6.34 17.66l-2.12 2.12m0-13.56 2.12 2.12m11.32 11.32 2.12 2.12"/></svg></a>
+  <a title="Options" onclick="showTab('opt')">
+    <svg viewBox="0 0 24 24" style="width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></a>
+  <a title="News" onclick="showTab('news')">
+    <svg viewBox="0 0 24 24" style="width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"/><line x1="18" y1="10" x2="10" y2="10"/><line x1="18" y1="14" x2="10" y2="14"/></svg></a>
+  <a title="TradingView" onclick="showTab('tv')">
+    <svg viewBox="0 0 24 24" style="width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8m-4-4v4"/></svg></a>
   <div class="sep"></div>
-  <a href="/dashboard" title="Dashboard">🏠</a>
+  <a href="/dashboard" title="Dashboard">
+    <svg viewBox="0 0 24 24" style="width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></a>
 </nav>
 
 <!-- ══ SIDEBAR ══ -->
@@ -969,7 +1205,7 @@ const YAHOO = BD.yahoo || "";
 const TVSYM = BD.sym   || "";
 const HAS   = BD.has   === "1";
 
-let CS = "₹";
+let CS = "₹"; // Always ₹ for Indian users
 let curI = "5m", curP = "5d";
 let lwcM = null, lwcV = null, candleSer = null, predSer = null, smaSer = null, vSer = null;
 let lwcOk = false, tvOk = false, indOk = false;
@@ -998,20 +1234,20 @@ const enc = s => encodeURIComponent(s);
 const r2  = n => Math.round(n * 100) / 100;
 
 function fmtP(cs, p) {
+  // Always ₹ for Indian users (Groww/Zerodha style)
   if (p === null || p === undefined) return "—";
   const v = Number(p);
-  if (cs === "₹") {
-    const s = v.toFixed(2).split(".");
-    let n = s[0], d = s[1];
-    if (n.length > 3) {
-      let l3 = n.slice(-3), rest = n.slice(0, -3), g = [];
-      while (rest.length > 2) { g.unshift(rest.slice(-2)); rest = rest.slice(0, -2); }
-      if (rest) g.unshift(rest);
-      n = g.join(",") + "," + l3;
-    }
-    return `₹${n}.${d}`;
+  if (isNaN(v)) return "—";
+  const s = v.toFixed(2).split(".");
+  let n = s[0], d = s[1];
+  const neg = n.startsWith("-"); if (neg) n = n.slice(1);
+  if (n.length > 3) {
+    let l3 = n.slice(-3), rest = n.slice(0, -3), g = [];
+    while (rest.length > 2) { g.unshift(rest.slice(-2)); rest = rest.slice(0, -2); }
+    if (rest) g.unshift(rest);
+    n = g.join(",") + "," + l3;
   }
-  return cs + v.toLocaleString("en-US", { minimumFractionDigits:2, maximumFractionDigits:2 });
+  return (neg?"-":"") + "₹" + n + "." + d;
 }
 
 /* ════ LOADER ════ */
@@ -1161,7 +1397,7 @@ async function loadPrice() {
   if (!YAHOO) return;
   try {
     const d = await fetch(`/price?symbol=${enc(YAHOO)}`).then(r => r.json());
-    CS = d.symbol || "₹";
+    CS = "₹"; // Always ₹
     document.getElementById("scard").style.display = "block";
     document.getElementById("cSym").textContent = TVSYM.includes(":") ? TVSYM.split(":")[1] : TVSYM;
     document.getElementById("cEx").textContent  = TVSYM.includes(":") ? TVSYM.split(":")[0] : "";
@@ -1197,7 +1433,7 @@ async function loadLWC() {
       document.getElementById("lwc-main").innerHTML = `<div class="empty"><div class="empty-ic">⚠️</div><p>${json.error}</p></div>`;
       hideL(); return;
     }
-    if (json.currencySymbol) CS = json.currencySymbol;
+    CS = "₹"; // Always ₹ for Indian display
     histData = [...json.data];
     barSecs  = json.barSecs || 300;
     const isDaily = json.isDaily;
@@ -1253,9 +1489,14 @@ async function loadLWC() {
       const r   = mW.getBoundingClientRect();
       // Clamp: chart can NEVER be wider than viewport minus fixed columns
       // Dynamic: measure actual rpanel width instead of hardcoded 300
-      const _rpW = document.querySelector('.rpanel')?.getBoundingClientRect().width || 300;
-      const _sbW = window.innerWidth > 780 ? (window.innerWidth > 1000 ? (window.innerWidth > 1200 ? 220 : 180) : 160) : 0;
-      const maxW = window.innerWidth - 48 - _sbW - _rpW - 4;
+      let maxW;
+      if (window.innerWidth <= 600) {
+        maxW = window.innerWidth; // full width on mobile
+      } else {
+        const _rpW = document.querySelector('.rpanel')?.getBoundingClientRect().width || 300;
+        const _sbW = window.innerWidth > 780 ? (window.innerWidth > 1000 ? (window.innerWidth > 1200 ? 220 : 180) : 160) : 0;
+        maxW = window.innerWidth - 48 - _sbW - _rpW - 4;
+      }
       const cW   = Math.max(200, Math.min(r.width || 600, maxW));
       const cH   = Math.max(200, r.height || 400);
       lwcM = LightweightCharts.createChart(mW, {
@@ -1378,6 +1619,7 @@ async function loadLWC() {
     // This replaces autoSize. We observe the mW container and resize
     // the chart explicitly, clamping to available grid column width.
     const _maxChartW = () => {
+      if (window.innerWidth <= 600) return window.innerWidth; // full width on mobile
       const rpW = document.querySelector('.rpanel')?.getBoundingClientRect().width || 300;
       const sbW = window.innerWidth > 780 ? (window.innerWidth > 1000 ? (window.innerWidth > 1200 ? 220 : 180) : 160) : 0;
       return Math.max(200, window.innerWidth - 48 - sbW - rpW - 4);
@@ -1408,7 +1650,7 @@ async function loadLWC() {
       onUpdate(d) {
         if (!d || !d.price) return;
         const liveP = d.price;
-        CS = d.symbol || CS;
+        CS = "₹";
 
         // ── Update price displays ──────────────────────────────────
         document.getElementById("cP").textContent   = d.display || "N/A";
@@ -2116,6 +2358,96 @@ async function loadNews() {
   }
   hideL();
 }
+
+
+/* ════ LIVE CLOCK + MARKET HOURS (IST) ════ */
+function _istNow() {
+  // Returns a Date object in IST
+  return new Date(new Date().toLocaleString("en-US", {timeZone:"Asia/Kolkata"}));
+}
+
+function _updateClock() {
+  const ist = _istNow();
+  const hh  = ist.getHours().toString().padStart(2,"0");
+  const mm  = ist.getMinutes().toString().padStart(2,"0");
+  const ss  = ist.getSeconds().toString().padStart(2,"0");
+  const days = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const dayName = days[ist.getDay()];
+  const date = ist.getDate().toString().padStart(2,"0");
+  const mon  = months[ist.getMonth()];
+  const yr   = ist.getFullYear();
+
+  const tEl = document.getElementById("hdrTime");
+  const dEl = document.getElementById("hdrDate");
+  if (tEl) tEl.textContent = `${hh}:${mm}:${ss} IST`;
+  if (dEl) dEl.textContent = `${dayName}, ${date} ${mon} ${yr}`;
+
+  // ── Market hours ──
+  const h = ist.getHours(), m = ist.getMinutes(), day = ist.getDay();
+  const mins = h * 60 + m;
+  const isWeekday = day >= 1 && day <= 5;
+
+  // NSE: 09:15 – 15:30 IST
+  const nseOpen  = 9*60+15, nseClose = 15*60+30;
+  const nseOn    = isWeekday && mins >= nseOpen && mins < nseClose;
+  const nsePre   = isWeekday && mins >= 9*60 && mins < nseOpen;
+
+  // US Markets open at 19:00 IST (9:30 ET) and close at 01:30 IST next day (16:00 ET)
+  // Simplified: open 19:00–01:30 IST weekdays (Mon–Fri ET = Mon–Sat IST check)
+  const usDayOk  = day >= 1 && day <= 5; // Mon–Fri IST (covers some weekend ET open)
+  const usOpen   = 19*60+0, usClose = 24*60+90; // 19:00 to 01:30 next day
+  const usOn     = usDayOk && (mins >= usOpen || mins < 90); // after 19:00 OR before 01:30
+
+  const nseDot = document.getElementById("nseStatusDot");
+  const nseTxt = document.getElementById("nseStatusTxt");
+  const usDot  = document.getElementById("usStatusDot");
+  const usTxt  = document.getElementById("usStatusTxt");
+
+  if (nseDot && nseTxt) {
+    if (nseOn) {
+      nseDot.className = "mkt-dot open";
+      nseTxt.textContent = "09:15–15:30";
+      nseTxt.style.color = "var(--g)";
+    } else if (nsePre) {
+      nseDot.className = "mkt-dot pre";
+      nseTxt.textContent = "Pre-open";
+      nseTxt.style.color = "var(--am)";
+    } else {
+      nseDot.className = "mkt-dot closed";
+      nseTxt.textContent = isWeekday ? "Closed" : "Weekend";
+      nseTxt.style.color = "var(--t3)";
+    }
+  }
+  if (usDot && usTxt) {
+    if (usOn) {
+      usDot.className = "mkt-dot open";
+      usTxt.textContent = "19:00–01:30";
+      usTxt.style.color = "var(--g)";
+    } else {
+      usDot.className = "mkt-dot closed";
+      usTxt.textContent = !usDayOk ? "Weekend" : "Opens 19:00";
+      usTxt.style.color = "var(--t3)";
+    }
+  }
+
+  // Update mktPill status
+  const pill = document.getElementById("mktPill");
+  if (pill) {
+    if (nseOn)       { pill.textContent="NSE OPEN";  pill.className="mkt-pill open"; }
+    else if (nsePre) { pill.textContent="PRE-OPEN";  pill.className="mkt-pill open"; }
+    else             { pill.textContent="NSE CLOSED";pill.className="mkt-pill closed"; }
+  }
+  // Ensure clock is ALWAYS visible on desktop (never hidden by JS)
+  if (window.innerWidth > 600) {
+    const ck = document.getElementById("hdrClock");
+    const mh = document.getElementById("mktHours");
+    if (ck) { ck.style.display = "flex"; ck.style.visibility = "visible"; ck.style.opacity = "1"; }
+    if (mh) { mh.style.display = "flex"; mh.style.visibility = "visible"; mh.style.opacity = "1"; }
+  }
+}
+setInterval(_updateClock, 1000);
+_updateClock();
 
 /* ════ TICKER BAR ════ */
 const TLIST = [
