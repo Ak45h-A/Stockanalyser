@@ -7,6 +7,14 @@ import math, random, calendar, time, threading, requests, json, queue
 
 app = Flask(__name__)
 
+# Speed: compression + caching headers
+@app.after_request
+def add_speed_headers(r):
+    if r.content_type and "json" in r.content_type:
+        r.headers["Cache-Control"] = "no-store"
+    r.headers["X-Content-Type-Options"] = "nosniff"
+    return r
+
 # ══════════════════════════════════════════════════════════════════
 # SESSION + CRUMB
 # ══════════════════════════════════════════════════════════════════
@@ -323,26 +331,39 @@ def _live_poller():
                     chg  = q.get("change", p-prev)
                     pct  = q.get("changePct", chg/prev*100 if prev else 0)
                     now_utc = int(datetime.now(timezone.utc).timestamp())
+                    # Convert USD→INR for commodities/crypto/US stocks
+                    lp, lhi, llo, lop, lprev, lbid, lask = p, q.get("high",p), q.get("low",p), q.get("open",p), prev, q.get("bid",p), q.get("ask",p)
+                    if _is_usd_priced(sym):
+                        rate  = _get_usdinr()
+                        lp    = round(p    * rate, 2)
+                        lprev = round(prev * rate, 2)
+                        chg   = round(lp - lprev, 2)
+                        lhi   = round(lhi  * rate, 2)
+                        llo   = round(llo  * rate, 2)
+                        lop   = round(lop  * rate, 2)
+                        lbid  = round(lbid * rate, 2)
+                        lask  = round(lask * rate, 2)
+
                     data = {
-                        "price":     round(p,2),
-                        "change":    round(chg,2),
-                        "changePct": round(pct,4),
-                        "display":   fmt_price(cs,p),
-                        "high":      round(q.get("high",p),2),
-                        "low":       round(q.get("low",p),2),
-                        "open":      round(q.get("open",p),2),
-                        "prev":      round(prev,2),
-                        "bid":       round(q.get("bid",p),2),
-                        "ask":       round(q.get("ask",p),2),
-                        "currency":  code, "symbol": cs,
-                        "marketState": q.get("marketState",""),
+                        "price":     lp,
+                        "change":    round(chg, 2),
+                        "changePct": round(pct, 4),
+                        "display":   fmt_price("₹", lp),
+                        "high":      lhi,
+                        "low":       llo,
+                        "open":      lop,
+                        "prev":      lprev,
+                        "bid":       lbid,
+                        "ask":       lask,
+                        "currency":  "INR", "symbol": "₹",
+                        "marketState": q.get("marketState", ""),
                         "serverUtc": now_utc,
                         "candleUpdate": {
                             "time":  now_utc,
-                            "close": round(p,2),
-                            "high":  round(q.get("high",p),2),
-                            "low":   round(q.get("low",p),2),
-                            "open":  round(q.get("open",p),2),
+                            "close": lp,
+                            "high":  lhi,
+                            "low":   llo,
+                            "open":  lop,
                         }
                     }
                     _last_price_val[sym] = data
@@ -367,22 +388,64 @@ def _cache_set(sym, data):
     with _cache_lock: _price_cache[sym] = (time.time(), dict(data))
 
 # ══════════════════════════════════════════════════════════════════
-# CURRENCY
+# CURRENCY — All displayed in ₹, USD prices converted to INR
 # ══════════════════════════════════════════════════════════════════
-CSYMS = {"INR":"₹","USD":"$","EUR":"€","GBP":"£","JPY":"¥","CNY":"¥",
-         "AUD":"A$","CAD":"C$","SGD":"S$","HKD":"HK$","KRW":"₩"}
+CSYMS = {"INR":"₹","USD":"₹","EUR":"₹","GBP":"₹","JPY":"₹","CNY":"₹",
+         "AUD":"₹","CAD":"₹","SGD":"₹","HKD":"₹","KRW":"₹"}
+
+# Symbols whose base price is in USD — need INR conversion
+_USD_PRICED_SUFFIXES = ("=F", "-USD", "-BTC")
+_USD_PRICED_INDICES  = {"^GSPC","^IXIC","^DJI","^VIX","^N225","^HSI","^FTSE","^GDAXI","^RUT"}
+
+# USD/INR rate — fetched live, cached 5 min
+_usdinr_rate  = 84.0
+_usdinr_ts    = 0.0
+_usdinr_lock  = threading.Lock()
+_USDINR_TTL   = 300
+
+def _get_usdinr():
+    """Return live USD/INR rate, cached for 5 min."""
+    global _usdinr_rate, _usdinr_ts
+    with _usdinr_lock:
+        if time.time() - _usdinr_ts < _USDINR_TTL:
+            return _usdinr_rate
+    try:
+        sess = _get_session(); crumb = _get_crumb()
+        for base in _BASES:
+            url = f"{base}/v7/finance/quote"
+            params = {"symbols":"USDINR=X","fields":"regularMarketPrice","formatted":"false"}
+            if crumb: params["crumb"] = crumb
+            r = sess.get(url, params=params, timeout=5)
+            if r.status_code == 200:
+                res = ((r.json().get("quoteResponse") or {}).get("result") or [None])[0]
+                if res:
+                    p = res.get("regularMarketPrice")
+                    if p and float(p) > 50:
+                        with _usdinr_lock:
+                            _usdinr_rate = float(p)
+                            _usdinr_ts   = time.time()
+                        return _usdinr_rate
+    except Exception:
+        pass
+    return _usdinr_rate
+
+def _is_usd_priced(sym):
+    """True if this symbol's price is quoted in USD."""
+    s = str(sym).upper()
+    # Futures and crypto
+    if any(s.endswith(sfx) for sfx in _USD_PRICED_SUFFIXES): return True
+    # Major global indices
+    if s in _USD_PRICED_INDICES: return True
+    # US stocks: no dot suffix, not Indian index
+    if ("." not in s and not s.startswith("^") and
+        "NIFTY" not in s and "SENSEX" not in s and
+        not s.endswith("=X")):
+        return True
+    return False
 
 def detect_currency(sym):
-    s = str(sym).upper()
-    if s.endswith(".NS") or s.endswith(".BO"): return "INR"
-    if any(x in s for x in ["^NSEI","^BSESN","^NSE","^CNX","NIFTY","SENSEX",
-                             "NIFTY_","INDIA_VIX","^INDIAVIX"]): return "INR"
-    if s.endswith("=F") or s.endswith("-USD") or s.endswith("=X"): return "USD"
-    if s.endswith(".L"): return "GBP"
-    if s.endswith(".PA") or s.endswith(".DE"): return "EUR"
-    if s.endswith(".HK"): return "HKD"
-    if s.endswith(".T"):  return "JPY"
-    return None
+    # Always INR — all prices shown with ₹
+    return "INR"
 
 def safe(v):
     try:
@@ -588,9 +651,20 @@ def price():
     if chg is None: chg=p-prev
     if pct is None: pct=(chg/prev*100) if prev else 0
 
+    # ── Convert USD prices → INR ──────────────────────────────
+    if _is_usd_priced(sym):
+        rate = _get_usdinr()
+        p    = round(float(p)    * rate, 2)
+        hi   = round(float(hi)   * rate, 2)
+        lo   = round(float(lo)   * rate, 2)
+        op   = round(float(op)   * rate, 2)
+        prev = round(float(prev) * rate, 2)
+        chg  = round(p - prev, 2)
+        # pct stays same — percentage is currency-neutral
+
     result={
         "price":round(p,2),"change":round(chg,2),"changePct":round(pct,4),
-        "currency":code,"symbol":cs,"display":fmt_price(cs,p),
+        "currency":"INR","symbol":"₹","display":fmt_price("₹",p),
         "high":round(hi,2),"low":round(lo,2),"open":round(op,2),"prev":round(prev,2),
         "serverUtc":now_utc
     }
@@ -1255,3 +1329,4 @@ def ai():        return render_template("ai.html")
 
 if __name__=="__main__":
     app.run(debug=True, threaded=True, use_reloader=False, host="0.0.0.0", port=5000)
+    
