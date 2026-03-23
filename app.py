@@ -95,6 +95,8 @@ def _startup():
     _get_session(force=True)
     time.sleep(0.5)
     _get_crumb()
+    time.sleep(0.5)
+    _live_fx()   # fetch live USD/INR immediately on startup
 threading.Thread(target=_startup, daemon=True).start()
 
 _BASES = ["https://query1.finance.yahoo.com", "https://query2.finance.yahoo.com"]
@@ -395,35 +397,97 @@ CSYMS = {"INR":"₹","USD":"₹","EUR":"₹","GBP":"₹","JPY":"₹","CNY":"₹"
 # Metals priced per troy oz → show per 10g (MCX standard)
 _METALS_PER10G = {"GC=F","MGC=F","SI=F","PL=F","PA=F"}
 
-# USD/INR live rate — cached 5 min
-_fx_rate    = 84.0
+# USD/INR live rate — cached 2 min, refreshed aggressively
+_fx_rate    = 93.0   # updated fallback (March 2026 actual rate)
 _fx_rate_ts = 0.0
 _fx_lock    = threading.Lock()
 
+def _fetch_usdinr_once(session, crumb, base):
+    """Single attempt to get USD/INR from one Yahoo base URL."""
+    params = {
+        "symbols": "USDINR=X",
+        "fields":  "regularMarketPrice,regularMarketPreviousClose",
+        "formatted": "false",
+    }
+    if crumb: params["crumb"] = crumb
+    r = session.get(f"{base}/v7/finance/quote", params=params, timeout=8)
+    if r.status_code == 200:
+        res = ((r.json().get("quoteResponse") or {}).get("result") or [None])[0]
+        if res:
+            rate = res.get("regularMarketPrice") or res.get("regularMarketPreviousClose")
+            if rate and 75 < float(rate) < 200:   # sanity: INR/USD should be 75-200
+                return float(rate)
+    return None
+
 def _live_fx():
-    """Return live USD/INR rate. Cached 5 min. Falls back to 84."""
+    """
+    Return live USD/INR rate, cached for 2 minutes.
+    Tries v7/quote first, then v8/chart as fallback.
+    Falls back to last known rate (never returns stale 84).
+    """
     global _fx_rate, _fx_rate_ts
+    # Return cached if fresh
     with _fx_lock:
-        if time.time() - _fx_rate_ts < 300:
+        if _fx_rate_ts > 0 and (time.time() - _fx_rate_ts) < 120:
             return _fx_rate
+
+    fetched = None
     try:
         s = _get_session(); c = _get_crumb()
+        # Try both query servers
         for base in _BASES:
-            params = {"symbols":"USDINR=X","fields":"regularMarketPrice","formatted":"false"}
-            if c: params["crumb"] = c
-            r = s.get(f"{base}/v7/finance/quote", params=params, timeout=6)
-            if r.status_code == 200:
-                res = ((r.json().get("quoteResponse") or {}).get("result") or [None])[0]
-                if res:
-                    rate = res.get("regularMarketPrice")
-                    if rate and 70 < float(rate) < 200:
-                        with _fx_lock:
-                            _fx_rate    = float(rate)
-                            _fx_rate_ts = time.time()
-                        return _fx_rate
-    except Exception:
-        pass
+            fetched = _fetch_usdinr_once(s, c, base)
+            if fetched: break
+
+        # Fallback: v8 chart for USDINR=X (2-day, 1-day interval)
+        if not fetched:
+            for base in _BASES:
+                try:
+                    url = f"{base}/v8/finance/chart/USDINR%3DX"
+                    params = {"interval":"1d","range":"2d","formatted":"false"}
+                    if c: params["crumb"] = c
+                    r = s.get(url, params=params, timeout=8)
+                    if r.status_code == 200:
+                        meta = (r.json().get("chart",{}).get("result") or [{}])[0].get("meta",{})
+                        p = meta.get("regularMarketPrice") or meta.get("previousClose")
+                        if p and 75 < float(p) < 200:
+                            fetched = float(p); break
+                except Exception: pass
+
+        # Fallback: ExchangeRate-API (free, no auth)
+        if not fetched:
+            try:
+                r2 = requests.get(
+                    "https://open.er-api.com/v6/latest/USD",
+                    timeout=5,
+                    headers={"User-Agent":"Mozilla/5.0"}
+                )
+                if r2.status_code == 200:
+                    inr = r2.json().get("rates",{}).get("INR")
+                    if inr and 75 < float(inr) < 200:
+                        fetched = float(inr)
+            except Exception: pass
+
+    except Exception: pass
+
+    if fetched:
+        with _fx_lock:
+            _fx_rate    = fetched
+            _fx_rate_ts = time.time()
+        return _fx_rate
+
+    # Nothing worked — return last known (never return stale 84 if we got better)
     return _fx_rate
+
+def _refresh_fx_background():
+    """Background thread: refresh USD/INR rate every 90 seconds."""
+    while True:
+        try:
+            _live_fx()   # this updates _fx_rate if fetch succeeds
+        except Exception: pass
+        time.sleep(90)
+
+threading.Thread(target=_refresh_fx_background, daemon=True).start()
 
 def _inr(sym, val):
     """Convert one price value to INR. Handles metals per-10g."""
@@ -892,106 +956,145 @@ def predict():
         pts=[]; signals=[]
         def add(pt,ic,tx): pts.append(pt); signals.append({"icon":ic,"text":tx})
 
-        # ── Lagging trend indicators ──────────────────────────────
-        if e9>e21_v:  add(2,"✅","EMA9 > EMA21 — Bullish cross")
-        else:         add(-2,"🔴","EMA9 < EMA21 — Bearish cross")
+        # ── 1. LINEAR REGRESSION SLOPE (most important) ───────────
+        # Slope of last N closes tells us actual trend direction.
+        try:
+            n_reg = min(10, len(c))
+            y  = np.array([float(c.iloc[-n_reg+i]) for i in range(n_reg)])
+            x  = np.arange(n_reg, dtype=float)
+            slope = float(np.polyfit(x, y, 1)[0])
+            slope_pct = slope / (float(c.iloc[-n_reg]) + 1e-9) * 100
+            if slope_pct >  0.3:  add(5,"📈",f"Price trending UP  (slope +{slope_pct:.2f}%/bar)")
+            elif slope_pct >  0.1: add(2,"📈",f"Mild upslope ({slope_pct:.2f}%/bar)")
+            elif slope_pct < -0.3: add(-5,"📉",f"Price trending DOWN (slope {slope_pct:.2f}%/bar)")
+            elif slope_pct < -0.1: add(-2,"📉",f"Mild downslope ({slope_pct:.2f}%/bar)")
+            else:                  add(0,"⚪",f"Flat slope ({slope_pct:.2f}%/bar)")
+        except: slope_pct=0
+
+        # ── 2. EMA ALIGNMENT (trend confirmation) ─────────────────
+        if e9>e21_v>e50_v:   add(3,"✅","EMA9>EMA21>EMA50 — Strong uptrend")
+        elif e9<e21_v<e50_v: add(-3,"🔴","EMA9<EMA21<EMA50 — Strong downtrend")
+        elif e9>e21_v:       add(1,"✅","EMA9 > EMA21 — Short-term bullish")
+        else:                add(-1,"🔴","EMA9 < EMA21 — Short-term bearish")
         if cur>e50_v: add(1,"✅",f"Above EMA50 ({fmt_price(cs2,e50_v)})")
         else:         add(-1,"🔴",f"Below EMA50 ({fmt_price(cs2,e50_v)})")
 
-        # ── RSI — momentum oscillator ─────────────────────────────
-        if r<25:      add(4,"✅",f"RSI {r:.1f} — Extreme Oversold ⚡")
-        elif r<35:    add(3,"✅",f"RSI {r:.1f} — Oversold")
-        elif r>80:    add(-4,"🔴",f"RSI {r:.1f} — Extreme Overbought ⚠️")
+        # ── 3. RSI with trend bias ────────────────────────────────
+        # In a trending market, RSI oversold in downtrend = still bearish
+        if r<25:      add(3,"✅",f"RSI {r:.1f} — Extreme Oversold ⚡")
+        elif r<35:    add(2,"✅",f"RSI {r:.1f} — Oversold")
+        elif r>80:    add(-3,"🔴",f"RSI {r:.1f} — Extreme Overbought ⚠️")
         elif r>65:    add(-2,"🔴",f"RSI {r:.1f} — Overbought")
         elif r>55:    add(1,"🟡",f"RSI {r:.1f} — Bullish zone")
         elif r<45:    add(-1,"🟡",f"RSI {r:.1f} — Bearish zone")
         else:         add(0,"⚪",f"RSI {r:.1f} — Neutral")
+        # RSI slope (is momentum accelerating?)
+        try:
+            rsi_slope = float(rsi.iloc[-1]) - float(rsi.iloc[-3])
+            if rsi_slope < -5:  add(-2,"📉",f"RSI falling fast ({rsi_slope:.1f} pts/3bar)")
+            elif rsi_slope > 5: add(2,"📈",f"RSI rising fast (+{rsi_slope:.1f} pts/3bar)")
+        except: pass
 
-        # ── Bollinger Band position ───────────────────────────────
-        if bp<0.15:   add(3,"✅","Near lower BB — Strong buy zone")
-        elif bp<0.25: add(1,"✅","Lower BB zone — Buy bias")
-        elif bp>0.85: add(-3,"🔴","Near upper BB — Strong sell zone")
-        elif bp>0.75: add(-1,"🔴","Upper BB zone — Sell bias")
-        else:         add(0,"⚪",f"BB position {bp*100:.0f}%")
-
-        # ── Stochastic ────────────────────────────────────────────
-        if k<20:      add(2,"✅",f"Stoch {k:.1f} — Oversold")
-        elif k>80:    add(-2,"🔴",f"Stoch {k:.1f} — Overbought")
-        else:         add(0,"⚪",f"Stoch {k:.1f}")
-
-        # ── MACD — trend + histogram velocity ────────────────────
-        if macdv>msigv: add(1,"✅","MACD above signal line")
-        else:           add(-1,"🔴","MACD below signal line")
-        # MACD histogram velocity (is momentum increasing or decreasing)
+        # ── 4. MACD (momentum direction + acceleration) ──────────
+        if macdv>msigv: add(1,"✅","MACD above signal")
+        else:           add(-1,"🔴","MACD below signal")
         try:
             hist_now  = float(macd.iloc[-1]) - float(msig.iloc[-1])
-            hist_prev = float(macd.iloc[-2]) - float(msig.iloc[-2])
+            hist_prev = float(macd.iloc[-3]) - float(msig.iloc[-3])
             hist_vel  = hist_now - hist_prev
-            if hist_vel > atrv * 0.05:
-                add(2,"📈","MACD histogram accelerating up")
-            elif hist_vel < -atrv * 0.05:
-                add(-2,"📉","MACD histogram accelerating down")
+            if hist_vel > atrv*0.03:    add(2,"📈","MACD histogram accelerating UP")
+            elif hist_vel < -atrv*0.03: add(-2,"📉","MACD histogram accelerating DOWN")
+            # MACD crossing zero (strong signal)
+            if macdv < 0 and float(macd.iloc[-2])>0: add(-3,"🔴","MACD crossed below zero!")
+            if macdv > 0 and float(macd.iloc[-2])<0: add(3,"✅","MACD crossed above zero!")
         except: pass
 
-        # ── Supertrend ────────────────────────────────────────────
-        if cur>stv:   add(2,"✅","Above Supertrend — BUY signal")
-        else:         add(-2,"🔴","Below Supertrend — SELL signal")
-
-        # ── Volume confirmation ───────────────────────────────────
-        if vol_r>2.0: add(2 if sum(pts)>0 else -2,"📊",f"Strong volume {vol_r:.1f}× avg")
-        elif vol_r>1.4: add(1 if sum(pts)>0 else -1,"📊",f"Volume spike {vol_r:.1f}× avg")
-
-        # ── Price Rate of Change (ROC) — THE KEY MOMENTUM SIGNAL ─
-        # This is what makes prediction match volatile markets.
-        # We look at price change over last 1, 3, and 5 bars.
+        # ── 5. SUPERTREND (flip = strong trend signal) ───────────
+        if cur>stv:   add(2,"✅","Above Supertrend — BUY")
+        else:         add(-2,"🔴","Below Supertrend — SELL")
+        # Supertrend flip detection
         try:
-            roc1  = (float(c.iloc[-1]) - float(c.iloc[-2])) / (float(c.iloc[-2])+1e-9) * 100
-            roc3  = (float(c.iloc[-1]) - float(c.iloc[-4])) / (float(c.iloc[-4])+1e-9) * 100 if len(c)>=4 else 0
-            roc5  = (float(c.iloc[-1]) - float(c.iloc[-6])) / (float(c.iloc[-6])+1e-9) * 100 if len(c)>=6 else 0
-            # Strong directional ROC overrides lagging indicators
-            if roc1 > 0.5:   add(3,"🚀",f"Price up {roc1:.2f}% last bar")
-            elif roc1 > 0.2: add(1,"📈",f"Price up {roc1:.2f}% last bar")
-            elif roc1 < -0.5: add(-3,"💥",f"Price down {roc1:.2f}% last bar")
-            elif roc1 < -0.2: add(-1,"📉",f"Price down {roc1:.2f}% last bar")
-            if roc3 > 1.0:   add(2,"📈",f"3-bar momentum +{roc3:.2f}%")
-            elif roc3 < -1.0: add(-2,"📉",f"3-bar momentum {roc3:.2f}%")
-            mom_str = f"+{roc5:.2f}%" if roc5>=0 else f"{roc5:.2f}%"
-            add(2 if roc5>0 else -2 if roc5<0 else 0,
-                "✅" if roc5>0 else "🔴" if roc5<0 else "⚪",
-                f"5-bar momentum {mom_str}")
+            prev_st_bull = float(c.iloc[-2]) > sv[-2] if len(sv)>=2 else (cur>stv)
+            curr_st_bull = cur > stv
+            if not prev_st_bull and curr_st_bull:  add(4,"🚀","Supertrend FLIPPED BULLISH! ⚡")
+            elif prev_st_bull and not curr_st_bull: add(-4,"💥","Supertrend FLIPPED BEARISH! ⚠️")
         except: pass
 
-        # ── Candle body direction (last 3 bars) ───────────────────
-        # Count bullish vs bearish candles in recent bars
+        # ── 6. PRICE ROC — weighted heavily (recent price is truth)
         try:
-            bull_bars = sum(1 for i in range(-3,0) if float(c.iloc[i])>float(c.iloc[i-1]))
-            bear_bars = 3 - bull_bars
-            if bull_bars >= 3:    add(2,"🕯️","3 consecutive bullish candles")
-            elif bear_bars >= 3:  add(-2,"🕯️","3 consecutive bearish candles")
-            elif bull_bars == 2:  add(1,"🕯️","Mostly bullish candles")
-            elif bear_bars == 2:  add(-1,"🕯️","Mostly bearish candles")
+            roc1 = (float(c.iloc[-1])-float(c.iloc[-2]))/(float(c.iloc[-2])+1e-9)*100
+            roc3 = (float(c.iloc[-1])-float(c.iloc[-4]))/(float(c.iloc[-4])+1e-9)*100 if len(c)>=4 else 0
+            roc5 = (float(c.iloc[-1])-float(c.iloc[-6]))/(float(c.iloc[-6])+1e-9)*100 if len(c)>=6 else 0
+            roc10= (float(c.iloc[-1])-float(c.iloc[-11]))/(float(c.iloc[-11])+1e-9)*100 if len(c)>=11 else roc5
+            # Weight: roc1=4x, roc3=3x, roc5=2x, roc10=1x
+            if roc1>0.5:    add(4,"🚀",f"Last bar +{roc1:.2f}% — bullish impulse")
+            elif roc1>0.15: add(2,"📈",f"Last bar +{roc1:.2f}%")
+            elif roc1<-0.5: add(-4,"💥",f"Last bar {roc1:.2f}% — bearish drop")
+            elif roc1<-0.15:add(-2,"📉",f"Last bar {roc1:.2f}%")
+            if roc3>1.0:    add(3,"📈",f"3-bar momentum +{roc3:.2f}%")
+            elif roc3<-1.0: add(-3,"📉",f"3-bar momentum {roc3:.2f}%")
+            elif roc3>0.4:  add(1,"📈",f"3-bar momentum +{roc3:.2f}%")
+            elif roc3<-0.4: add(-1,"📉",f"3-bar momentum {roc3:.2f}%")
+            if roc5>1.5:    add(2,"📈",f"5-bar momentum +{roc5:.2f}%")
+            elif roc5<-1.5: add(-2,"📉",f"5-bar momentum {roc5:.2f}%")
+            if roc10>3.0:   add(2,"📈",f"10-bar momentum +{roc10:.2f}%")
+            elif roc10<-3.0:add(-2,"📉",f"10-bar momentum {roc10:.2f}%")
+        except: roc1=roc3=roc5=roc10=0
+
+        # ── 7. CONSECUTIVE CANDLE PATTERN ────────────────────────
+        try:
+            bear5=sum(1 for i in range(-5,0) if float(c.iloc[i])<float(c.iloc[i-1]))
+            bull5=5-bear5
+            if bear5>=4:  add(-3,"🕯️",f"{bear5}/5 bearish candles — downtrend")
+            elif bull5>=4: add(3,"🕯️",f"{bull5}/5 bullish candles — uptrend")
+            elif bear5==3: add(-1,"🕯️","Mostly bearish candles")
+            elif bull5==3: add(1,"🕯️","Mostly bullish candles")
         except: pass
 
-        # ── Price vs VWAP ─────────────────────────────────────────
+        # ── 8. VOLUME CONFIRMATION ────────────────────────────────
+        try:
+            vol_dir = 1 if roc1 > 0 else -1
+            if vol_r>2.0:   add(3*vol_dir,"📊",f"High volume ({vol_r:.1f}×) confirms move")
+            elif vol_r>1.4: add(1*vol_dir,"📊",f"Above-avg volume ({vol_r:.1f}×)")
+        except: pass
+
+        # ── 9. BOLLINGER BAND ─────────────────────────────────────
+        if bp<0.1:    add(2,"✅","Near lower BB — oversold bounce possible")
+        elif bp<0.25: add(1,"✅","Lower BB zone")
+        elif bp>0.9:  add(-2,"🔴","Near upper BB — overbought")
+        elif bp>0.75: add(-1,"🔴","Upper BB zone")
+
+        # ── 10. STOCHASTIC ───────────────────────────────────────
+        if k<20:  add(1,"✅",f"Stoch {k:.1f} — Oversold")
+        elif k>80: add(-1,"🔴",f"Stoch {k:.1f} — Overbought")
+
+        # ── PRICE vs VWAP ─────────────────────────────────────────
         try:
             typ2=(h+lo+c)/3
-            vwap_val=float((typ2*v).rolling(min(20,len(c))).sum().iloc[-1] /
+            vwap_val=float((typ2*v).rolling(min(20,len(c))).sum().iloc[-1]/
                            (v.rolling(min(20,len(c))).sum().iloc[-1]+1e-9))
-            if cur > vwap_val * 1.001:  add(1,"✅",f"Above VWAP {fmt_price(cs2,vwap_val)}")
-            elif cur < vwap_val * 0.999: add(-1,"🔴",f"Below VWAP {fmt_price(cs2,vwap_val)}")
+            if cur>vwap_val*1.001:   add(1,"✅",f"Above VWAP {fmt_price(cs2,vwap_val)}")
+            elif cur<vwap_val*0.999: add(-1,"🔴",f"Below VWAP {fmt_price(cs2,vwap_val)}")
         except: pass
 
-        # ── Final score with ROC dominance ───────────────────────
-        # Normalise: raw score can be large due to more signals
+        # ══ FINAL SCORE — recent price action dominates ══════════
         raw_score = sum(pts)
-        # Cap to [-15, 15] then remap to [-10, 10]
-        score = max(-10, min(10, raw_score * 10 / 15))
+        # Use wider normalisation so extremes can actually reach BEARISH/BULLISH
+        score = max(-10, min(10, raw_score * 10 / 25))
         score = round(score, 1)
+
+        # Hard overrides — crash / surge detection
+        try:
+            if roc1<-0.5 and roc3<-1.5 and slope_pct<-0.3:
+                score = min(score, -4.0)   # force at least BEARISH
+            if roc1>0.5 and roc3>1.5 and slope_pct>0.3:
+                score = max(score, 4.0)    # force at least BULLISH
+        except: pass
 
         if score>=2.5:    direction,color="BULLISH","#00C48C"
         elif score<=-2.5: direction,color="BEARISH","#E05555"
         else:             direction,color="SIDEWAYS","#F0A82A"
-        conf=round(min(95,abs(score)/10*100+20),1)  # min 20% confidence
+        conf=round(min(95,abs(score)/10*100+25),1)
         entry=round(cur,2)
         if direction=="BULLISH":
             sl=round(cur-atrv,2); t1=round(cur+atrv*.5,2); t2=round(cur+atrv,2)
@@ -1110,54 +1213,152 @@ def _synthetic_options(spot,sym='',expiry_idx=0):
             "volume":int(poi*0.10*rng.uniform(0.4,1.6)),"bid":round(max(0,pp-sp),2),"ask":round(pp+sp,2)})
     return calls,puts
 
+# Options chain cache — updates every 30s with live spot
+_opt_cache     = {}   # sym -> {data, ts, expiry_idx}
+_opt_lock      = threading.Lock()
+_OPT_TTL       = 30   # seconds
+
+def _build_option_data(sym, expiry_idx, spot):
+    """Build option chain JSON dict for given symbol + spot price."""
+    code = detect_currency(sym); cs2 = "₹"
+    calls_data = puts_data = real_exps = None; use_real = False
+    try:
+        t = _ticker(sym)
+        with _yf_sem: real_exps = t.options
+        if real_exps:
+            idx = min(expiry_idx, len(real_exps)-1)
+            with _yf_sem: chain = t.option_chain(real_exps[idx])
+            def proc(df):
+                cols = [c for c in ["strike","lastPrice","openInterest","impliedVolatility","volume","bid","ask"] if c in df.columns]
+                return df[cols].head(20).fillna(0).to_dict(orient="records")
+            calls_data = proc(chain.calls); puts_data = proc(chain.puts)
+            if sum(r.get("openInterest",0) for r in calls_data+puts_data) > 0:
+                use_real = True
+    except: pass
+    if not use_real:
+        if not spot:
+            df = _history(sym,"5d","1d")
+            spot = float(df["Close"].iloc[-1]) if not df.empty else 1000.0
+        exps = _make_expiries(); idx = min(expiry_idx, len(exps)-1)
+        # Re-generate synthetic OI with small random drift to simulate live changes
+        calls_data, puts_data = _synthetic_options(spot, sym=sym, expiry_idx=idx)
+        # Inject small live-like OI drift (±0.5-2%)
+        rng2 = random.Random()
+        for row in calls_data + puts_data:
+            oi = row.get("openInterest", 0)
+            if oi > 0:
+                drift = rng2.uniform(-0.02, 0.02)
+                row["openInterest"] = max(0, int(oi * (1 + drift)))
+                row["volume"] = max(0, int(row.get("volume",0) * rng2.uniform(0.9, 1.15)))
+                # Update option price using live spot
+                K = row["strike"]; lp = row.get("lastPrice", 0)
+                if lp > 0:
+                    row["lastPrice"] = round(lp * rng2.uniform(0.97, 1.03), 2)
+        exps_list = exps
+    else:
+        exps_list = list(real_exps); idx = min(expiry_idx, len(exps_list)-1)
+
+    calls, puts = calls_data, puts_data
+    coi = sum(r.get("openInterest",0) for r in calls)
+    poi = sum(r.get("openInterest",0) for r in puts)
+    cv  = sum(r.get("volume",0) for r in calls)
+    pv  = sum(r.get("volume",0) for r in puts)
+    pcr = round(poi/(coi+1e-9), 3)
+    pcr_sig = ("🟢 Bullish — PCR>1.3" if pcr>1.3 else
+               "🔴 Bearish — PCR<0.7" if pcr<0.7 else "🟡 Neutral")
+    merged = {}
+    for r in calls+puts:
+        merged[r["strike"]] = merged.get(r["strike"],0) + r.get("openInterest",0)
+    return {
+        "expiries":exps_list, "selectedExpiry":exps_list[idx],
+        "currency":code, "currencySymbol":cs2,
+        "pcrOI":pcr, "pcrSignal":pcr_sig,
+        "totalCallOI":int(coi), "totalPutOI":int(poi),
+        "totalCallVol":int(cv), "totalPutVol":int(pv),
+        "maxPain":max(merged,key=merged.get) if merged else None,
+        "calls":calls, "puts":puts, "synthetic":(not use_real),
+        "spotPrice":round(float(spot),2) if spot else None,
+        "ts": int(time.time())
+    }
+
 @app.route("/optionchain")
 def optionchain():
-    sym=request.args.get("symbol","").strip()
-    expiry_idx=int(request.args.get("expiry_idx","0"))
+    sym        = request.args.get("symbol","").strip()
+    expiry_idx = int(request.args.get("expiry_idx","0"))
+    force      = request.args.get("refresh","0") == "1"
     if not sym: return jsonify({"error":"No symbol"})
     try:
-        code=detect_currency(sym) or "USD"; cs2=CSYMS.get(code,"$")
-        spot=None
-        cached=_cache_get(sym)
-        if cached and cached.get("price")!="N/A": spot=cached.get("price")
+        # Get live spot price first
+        spot = None
+        cached_price = _cache_get(sym)
+        if cached_price and cached_price.get("price") not in (None,"N/A"):
+            spot = cached_price["price"]
         if not spot:
-            q7=_v7_quote(sym)
-            if q7: spot=q7["price"]
-        calls_data=puts_data=real_exps=None; use_real=False
-        try:
-            t=_ticker(sym)
-            with _yf_sem: real_exps=t.options
-            if real_exps:
-                idx=min(expiry_idx,len(real_exps)-1)
-                with _yf_sem: chain=t.option_chain(real_exps[idx])
-                def proc(df):
-                    cols=[c for c in ["strike","lastPrice","openInterest","impliedVolatility","volume","bid","ask"] if c in df.columns]
-                    return df[cols].head(20).fillna(0).to_dict(orient="records")
-                calls_data=proc(chain.calls); puts_data=proc(chain.puts)
-                if sum(r.get("openInterest",0) for r in calls_data+puts_data)>0: use_real=True
-        except: pass
-        if not use_real:
-            if not spot:
-                df=_history(sym,"5d","1d")
-                spot=float(df["Close"].iloc[-1]) if not df.empty else 1000.0
-            exps=_make_expiries(); idx=min(expiry_idx,len(exps)-1)
-            calls_data,puts_data=_synthetic_options(spot,sym=sym,expiry_idx=idx); exps_list=exps
-        else:
-            exps_list=list(real_exps); idx=min(expiry_idx,len(exps_list)-1)
-        calls,puts=calls_data,puts_data
-        coi=sum(r.get("openInterest",0) for r in calls); poi=sum(r.get("openInterest",0) for r in puts)
-        cv=sum(r.get("volume",0) for r in calls); pv=sum(r.get("volume",0) for r in puts)
-        pcr=round(poi/(coi+1e-9),3)
-        pcr_sig=("🟢 Bullish — PCR>1.3" if pcr>1.3 else "🔴 Bearish — PCR<0.7" if pcr<0.7 else "🟡 Neutral")
-        merged={}
-        for r in calls+puts: merged[r["strike"]]=merged.get(r["strike"],0)+r.get("openInterest",0)
-        return jsonify({"expiries":exps_list,"selectedExpiry":exps_list[idx],
-            "currency":code,"currencySymbol":cs2,"pcrOI":pcr,"pcrSignal":pcr_sig,
-            "totalCallOI":int(coi),"totalPutOI":int(poi),"totalCallVol":int(cv),"totalPutVol":int(pv),
-            "maxPain":max(merged,key=merged.get) if merged else None,
-            "calls":calls,"puts":puts,"synthetic":(not use_real),
-            "spotPrice":round(spot,2) if spot else None})
-    except Exception as e: return jsonify({"error":str(e)})
+            q7 = _v7_quote(sym)
+            if q7: spot = _inr(sym, q7["price"])
+
+        # Check option cache
+        cache_key = f"{sym}:{expiry_idx}"
+        with _opt_lock:
+            oc = _opt_cache.get(cache_key)
+        if not force and oc and (time.time()-oc["ts"]) < _OPT_TTL:
+            data = dict(oc)
+            if spot: data["spotPrice"] = round(float(spot), 2)
+            return jsonify(data)
+
+        # Build fresh data
+        data = _build_option_data(sym, expiry_idx, spot)
+        with _opt_lock:
+            _opt_cache[cache_key] = data
+        return jsonify(data)
+    except Exception as e:
+        return jsonify({"error":str(e)})
+
+@app.route("/stream/options")
+def stream_options():
+    """SSE endpoint for live options chain updates every 15s."""
+    sym        = request.args.get("symbol","").strip()
+    expiry_idx = int(request.args.get("expiry_idx","0"))
+    if not sym:
+        return Response("data: {}\n\n", mimetype="text/event-stream")
+
+    def generate():
+        last_spot = None
+        while True:
+            try:
+                # Get live spot
+                spot = None
+                cp = _cache_get(sym)
+                if cp and cp.get("price") not in (None,"N/A"):
+                    spot = cp["price"]
+                if not spot:
+                    q7 = _v7_quote(sym)
+                    if q7: spot = _inr(sym, q7["price"])
+
+                # Only rebuild if spot changed meaningfully or cache stale
+                cache_key = f"{sym}:{expiry_idx}"
+                with _opt_lock:
+                    oc = _opt_cache.get(cache_key)
+                spot_changed = (last_spot is None or
+                                (spot and abs(float(spot)-float(last_spot))/float(last_spot+1e-9) > 0.0005))
+                stale = not oc or (time.time()-oc["ts"]) > _OPT_TTL
+
+                if spot_changed or stale:
+                    data = _build_option_data(sym, expiry_idx, spot)
+                    with _opt_lock:
+                        _opt_cache[cache_key] = data
+                    last_spot = spot
+                    yield "data: " + json.dumps(data) + "\n\n"
+                else:
+                    yield ": heartbeat\n\n"
+            except GeneratorExit:
+                break
+            except Exception:
+                yield ": error\n\n"
+            time.sleep(15)
+
+    return Response(generate(), mimetype="text/event-stream",
+                    headers={"Cache-Control":"no-cache","X-Accel-Buffering":"no"})
 
 # ══════════════════════════════════════════════════════════════════
 # NEWS
@@ -1307,14 +1508,23 @@ def debug_currency():
     """Check live USD/INR rate and sample commodity conversion."""
     rate = _live_fx()
     samples = {}
-    for sym in ["GC=F","CL=F","BTC-USD","AAPL","^GSPC"]:
+    for sym in ["GC=F","CL=F","SI=F","BTC-USD","AAPL","^GSPC"]:
         q = _v7_quote(sym)
         if q:
             raw = q["price"]
             converted = _inr(sym, raw)
-            samples[sym] = {"raw_usd": round(raw,2), "inr": converted,
-                            "per10g": sym in _METALS_PER10G}
-    return jsonify({"usdinr_rate": rate, "samples": samples})
+            samples[sym] = {
+                "raw_usd":   round(raw, 2),
+                "inr":       converted,
+                "per10g":    sym in _METALS_PER10G,
+                "formula":   f"{raw:.2f} × {rate:.2f}" + (f" ÷ 3.11035 = {converted}" if sym in _METALS_PER10G else f" = {converted}")
+            }
+    return jsonify({
+        "usdinr_rate":      rate,
+        "rate_age_seconds": round(time.time() - _fx_rate_ts, 1),
+        "fallback_rate":    93.0,
+        "samples":          samples
+    })
 
 @app.route("/debug/yahoo")
 def debug_yahoo():

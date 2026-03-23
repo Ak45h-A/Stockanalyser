@@ -1298,6 +1298,8 @@ function showTab(name) {
   if (name === "ind")      loadInd();
   if (name === "pred")     loadPred();
   if (name === "opt")      loadOpt();
+  // Stop options SSE when switching away
+  if (name !== "opt" && _optSSE) { try { _optSSE.close(); } catch(e){} _optSSE = null; }
   if (name === "tv")       loadTV();
   if (name === "news")     loadNews();
 }
@@ -2160,102 +2162,104 @@ async function loadOpt(idx) {
   if (!YAHOO) return;
   if (idx !== undefined) optIdx = idx;
   showL("Loading options…");
+
   try {
-    const d = await fetch(`/optionchain?symbol=${enc(YAHOO)}&expiry_idx=${optIdx}`).then(r => r.json());
+    const d = await fetch(`/optionchain?symbol=${enc(YAHOO)}&expiry_idx=${optIdx}`).then(r=>r.json());
     if (d.error) { document.getElementById("optInner").innerHTML=`<div class="err">${d.error}</div>`; hideL(); return; }
-    CS = d.currencySymbol || CS;
-    const cs2 = d.currencySymbol || CS;
-    const pColor = d.pcrOI>1.3?"var(--g)":d.pcrOI<0.7?"var(--r)":"var(--am)";
-    const pct = Math.min(100,(d.pcrOI/2)*100);
-    const expBtns = (d.expiries||[]).slice(0,8).map((e,i)=>
-      `<button class="exp-btn ${i===optIdx?"on":""}" onclick="loadOpt(${i})">${e}</button>`).join("");
+    _renderOptChain(d);
+    hideL();
+    // Start SSE live updates
+    _startOptSSE();
+  } catch(e) { hideL(); }
+}
 
-    // Estimate change in OI (simulate — real data would come from server)
-    const callRows = d.calls.map(r => {
-      const cOI = r.openInterest||0;
-      const dOI = Math.round(cOI * (Math.random()*0.2 - 0.05));
-      return `<div class="chain-row">
-        <span>${fmtP(cs2,r.strike)}</span>
-        <span>${fmtP(cs2,r.lastPrice)}</span>
-        <span>${cOI.toLocaleString("en-IN")}</span>
-        <span class="${dOI>=0?"coi-up":"coi-dn"}">${dOI>=0?"+":""}${dOI.toLocaleString("en-IN")}</span>
-        <span>${((r.impliedVolatility||0)*100).toFixed(0)}%</span>
-      </div>`;
-    }).join("");
-    const putRows = d.puts.map(r => {
-      const pOI = r.openInterest||0;
-      const dOI = Math.round(pOI * (Math.random()*0.2 - 0.05));
-      return `<div class="chain-row">
-        <span>${fmtP(cs2,r.strike)}</span>
-        <span>${fmtP(cs2,r.lastPrice)}</span>
-        <span>${pOI.toLocaleString("en-IN")}</span>
-        <span class="${dOI>=0?"coi-up":"coi-dn"}">${dOI>=0?"+":""}${dOI.toLocaleString("en-IN")}</span>
-        <span>${((r.impliedVolatility||0)*100).toFixed(0)}%</span>
-      </div>`;
-    }).join("");
+let _optSSE = null;
+function _startOptSSE() {
+  if (_optSSE) { try { _optSSE.close(); } catch(e){} }
+  if (!YAHOO) return;
+  _optSSE = new EventSource(`/stream/options?symbol=${enc(YAHOO)}&expiry_idx=${optIdx}`);
+  _optSSE.onmessage = e => {
+    try {
+      const d = JSON.parse(e.data);
+      if (d && !d.error) _renderOptChain(d);
+    } catch(err) {}
+  };
+  _optSSE.onerror = () => { try { _optSSE.close(); } catch(e){} _optSSE = null; };
+}
 
-    document.getElementById("optInner").innerHTML = `
-      ${d.synthetic ? `<div style="background:rgba(255,184,77,.12);border:1px solid var(--am);border-radius:8px;padding:7px 12px;font-size:9px;color:var(--am);margin-bottom:6px;display:flex;align-items:center;gap:6px"><span>⚠️</span><span><strong>Simulated Data</strong> — Real options unavailable for this symbol. Black-Scholes synthetic chain shown.</span></div>` : ''}
-      <div class="exp-row">${expBtns}</div>
-      <div class="oi-row">
-        <div class="oi-card call">
-          <div class="oi-lbl">Call OI</div>
-          <div class="oi-val">${d.totalCallOI.toLocaleString("en-IN")}</div>
-          <div class="oi-chg" style="color:var(--g)">Vol ${d.totalCallVol.toLocaleString("en-IN")}</div>
-        </div>
-        <div class="oi-card put">
-          <div class="oi-lbl">Put OI</div>
-          <div class="oi-val">${d.totalPutOI.toLocaleString("en-IN")}</div>
-          <div class="oi-chg" style="color:var(--r)">Vol ${d.totalPutVol.toLocaleString("en-IN")}</div>
-        </div>
-      </div>
-      <div class="pcr-summary">
-        <div class="pcr-card"><div class="pcr-lbl">PCR</div><div class="pcr-val" style="color:${pColor}">${d.pcrOI}</div><div class="pcr-bar"><div class="pcr-fill" style="width:${pct}%;background:${pColor}"></div></div></div>
-        <div class="pcr-card"><div class="pcr-lbl">Max Pain</div><div class="pcr-val" style="font-size:12px">${d.maxPain?fmtP(cs2,d.maxPain):"—"}</div></div>
-        <div class="pcr-card"><div class="pcr-lbl">Expiry</div><div class="pcr-val" style="font-size:10px;color:var(--am)">${d.selectedExpiry||"—"}</div></div>
-      </div>
-      <div class="pcr-sig">${d.pcrSignal}${d.maxPain?` · Max Pain: ${fmtP(cs2,d.maxPain)}`:""}</div>
-      <div class="chain-grid">
-        <div class="chain-side">
-          <div style="font-size:8px;color:var(--g);text-align:center;padding:4px;background:var(--gbg);font-weight:800;text-transform:uppercase;letter-spacing:.5px">CALLS</div>
-          <div class="chain-hdr"><span>Strike</span><span>LTP</span><span>OI</span><span style="color:#00D09C">ΔOI</span><span>IV</span></div>
-          ${callRows}
-        </div>
-        <div class="chain-side">
-          <div style="font-size:8px;color:var(--r);text-align:center;padding:4px;background:var(--rbg);font-weight:800;text-transform:uppercase;letter-spacing:.5px">PUTS</div>
-          <div class="chain-hdr"><span>Strike</span><span>LTP</span><span>OI</span><span style="color:#F45E6D">ΔOI</span><span>IV</span></div>
-          ${putRows}
-        </div>
-      </div>
-      <div class="opt-chart-block">
-        <div class="opt-chart-ttl">Open Interest by Strike</div>
-        <div class="ch-wrap" style="height:110px"><canvas id="cOI"></canvas></div>
-      </div>
-      <div class="opt-chart-block">
-        <div class="opt-chart-ttl">Call vs Put Premium (${cs2})</div>
-        <div class="ch-wrap" style="height:90px"><canvas id="cPrem"></canvas></div>
-      </div>
-    `;
-    const strikes = d.calls.map(c=>fmtP(cs2,c.strike));
-    mkCJ("cOI",{type:"bar",data:{labels:strikes,datasets:[
-      {label:"Call OI",data:d.calls.map(c=>c.openInterest),backgroundColor:"rgba(0,208,156,.65)"},
-      {label:"Put OI", data:d.puts.map(c=>c.openInterest), backgroundColor:"rgba(244,94,109,.65)"}
-    ]},options:{animation:false,responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:"#7A8CA0",font:{size:8},boxWidth:7}}},scales:{x:{...XS,ticks:{...XS.ticks,maxRotation:45,font:{size:8}}},y:{...YS,ticks:{...YS.ticks,callback:v=>v}}}}});
-    mkCJ("cPrem",{type:"line",data:{labels:strikes,datasets:[
-      {label:"Call",data:d.calls.map(c=>c.lastPrice),borderColor:"#00D09C",pointRadius:2,borderWidth:1.5,fill:false},
-      {label:"Put", data:d.puts.map(c=>c.lastPrice), borderColor:"#F45E6D",pointRadius:2,borderWidth:1.5,fill:false}
-    ]},options:{animation:false,responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:"#7A8CA0",font:{size:8},boxWidth:7}}},scales:{x:{...XS,ticks:{...XS.ticks,maxRotation:45,font:{size:8}}},y:{...YS,ticks:{...YS.ticks,callback:v=>`${cs2}${v}`}}}}});
+function _renderOptChain(d) {
+  const cs2 = "₹";
+  const pColor = d.pcrOI>1.3?"var(--g)":d.pcrOI<0.7?"var(--r)":"var(--am)";
+  const pct    = Math.min(100,(d.pcrOI/2)*100);
+  const expBtns = (d.expiries||[]).slice(0,8).map((e,i)=>
+    `<button class="exp-btn ${i===optIdx?"on":""}" onclick="loadOpt(${i})">${e}</button>`).join("");
 
-    // Trigger AI analysis
-    const curPrice = parseFloat(document.getElementById("cP")?.textContent?.replace(/[^0-9.]/g,"") || 0);
-    const dKey = `${YAHOO}_${optIdx}_${d.pcrOI}`;
-    if (dKey !== lastOptDataKey) {
-      lastOptDataKey = dKey;
-      oaRunning = false;
-      runOptionsAI(d, lastPredData, curPrice || d.maxPain || 0);
-    }
-  } catch(e) { console.error(e); }
-  hideL();
+  // Calls table with OI change colour coding
+  const callRows = (d.calls||[]).map(r => {
+    const cOI = r.openInterest||0;
+    const chOI= r.oiChange||0;
+    return `<div class="chain-row">
+      <span>${fmtP(cs2,r.strike)}</span>
+      <span>${fmtP(cs2,r.lastPrice)}</span>
+      <span style="font-weight:700">${cOI.toLocaleString("en-IN")}</span>
+      <span class="${chOI>=0?"coi-up":"coi-dn"}">${chOI>=0?"+":""}${chOI.toLocaleString("en-IN")}</span>
+      <span>${((r.impliedVolatility||0)*100).toFixed(0)}%</span>
+    </div>`;
+  }).join("");
+
+  const putRows = (d.puts||[]).map(r => {
+    const pOI = r.openInterest||0;
+    const chOI= r.oiChange||0;
+    return `<div class="chain-row">
+      <span>${fmtP(cs2,r.strike)}</span>
+      <span>${fmtP(cs2,r.lastPrice)}</span>
+      <span style="font-weight:700">${pOI.toLocaleString("en-IN")}</span>
+      <span class="${chOI>=0?"coi-up":"coi-dn"}">${chOI>=0?"+":""}${chOI.toLocaleString("en-IN")}</span>
+      <span>${((r.impliedVolatility||0)*100).toFixed(0)}%</span>
+    </div>`;
+  }).join("");
+
+  // Live pulse indicator
+  const liveTag = `<span style="display:inline-flex;align-items:center;gap:4px;font-size:9px;color:var(--g);font-weight:800">
+    <span style="width:6px;height:6px;border-radius:50%;background:var(--g);animation:pulse 1s infinite"></span>LIVE</span>`;
+
+  document.getElementById("optInner").innerHTML = `
+    ${d.synthetic?`<div style="background:rgba(255,184,77,.12);border:1px solid var(--am);border-radius:8px;padding:7px 12px;font-size:9px;color:var(--am);margin-bottom:6px;display:flex;align-items:center;gap:6px"><span>⚠️</span><span><strong>Simulated Data</strong> — Real options unavailable. Black-Scholes synthetic chain shown.</span></div>`:""}
+    <div class="exp-row">${expBtns}</div>
+    <div class="oi-row">
+      <div class="oi-card call">
+        <div class="oi-lbl">Call OI ${liveTag}</div>
+        <div class="oi-val" id="liveCallOI">${d.totalCallOI.toLocaleString("en-IN")}</div>
+        <div class="oi-chg" style="color:var(--g)">Vol ${d.totalCallVol.toLocaleString("en-IN")}</div>
+      </div>
+      <div class="oi-card put">
+        <div class="oi-lbl">Put OI ${liveTag}</div>
+        <div class="oi-val" id="livePutOI">${d.totalPutOI.toLocaleString("en-IN")}</div>
+        <div class="oi-chg" style="color:var(--r)">Vol ${d.totalPutVol.toLocaleString("en-IN")}</div>
+      </div>
+    </div>
+    <div class="pcr-summary">
+      <div class="pcr-card"><div class="pcr-lbl">PCR</div><div class="pcr-val" style="color:${pColor}">${d.pcrOI}</div><div class="pcr-bar"><div class="pcr-fill" style="width:${pct}%;background:${pColor}"></div></div></div>
+      <div class="pcr-card"><div class="pcr-lbl">Max Pain</div><div class="pcr-val" style="font-size:12px">${d.maxPain?fmtP(cs2,d.maxPain):"—"}</div></div>
+      <div class="pcr-card"><div class="pcr-lbl">Expiry</div><div class="pcr-val" style="font-size:10px;color:var(--am)">${d.selectedExpiry||"—"}</div></div>
+      <div class="pcr-card"><div class="pcr-lbl">Spot</div><div class="pcr-val" style="font-size:11px">${d.spotPrice?fmtP(cs2,d.spotPrice):"—"}</div></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:4px">
+      <div>
+        <div class="chain-hdr" style="grid-template-columns:repeat(5,1fr)">
+          <span>Strike</span><span>Price</span><span>OI</span><span>ΔOI</span><span>IV</span>
+        </div>
+        <div class="chain-hdr" style="font-size:9px;color:var(--g);padding:2px 8px;font-weight:800">CALLS</div>
+        ${callRows}
+      </div>
+      <div>
+        <div class="chain-hdr" style="grid-template-columns:repeat(5,1fr)">
+          <span>Strike</span><span>Price</span><span>OI</span><span>ΔOI</span><span>IV</span>
+        </div>
+        <div class="chain-hdr" style="font-size:9px;color:var(--r);padding:2px 8px;font-weight:800">PUTS</div>
+        ${putRows}
+      </div>
+    </div>`;
 }
 
 /* ════ TRADINGVIEW ════ */
