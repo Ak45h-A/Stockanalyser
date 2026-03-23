@@ -331,19 +331,15 @@ def _live_poller():
                     chg  = q.get("change", p-prev)
                     pct  = q.get("changePct", chg/prev*100 if prev else 0)
                     now_utc = int(datetime.now(timezone.utc).timestamp())
-                    # Convert USD→INR for commodities/crypto/US stocks
-                    lp, lhi, llo, lop, lprev, lbid, lask = p, q.get("high",p), q.get("low",p), q.get("open",p), prev, q.get("bid",p), q.get("ask",p)
-                    if _is_usd_priced(sym):
-                        rate  = _get_usdinr()
-                        lp    = round(p    * rate, 2)
-                        lprev = round(prev * rate, 2)
-                        chg   = round(lp - lprev, 2)
-                        lhi   = round(lhi  * rate, 2)
-                        llo   = round(llo  * rate, 2)
-                        lop   = round(lop  * rate, 2)
-                        lbid  = round(lbid * rate, 2)
-                        lask  = round(lask * rate, 2)
-
+                    # Convert all prices to INR using _inr() — handles metals per-10g automatically
+                    lp    = _inr(sym, p)
+                    lprev = _inr(sym, prev)
+                    lhi   = _inr(sym, q.get("high", p))
+                    llo   = _inr(sym, q.get("low",  p))
+                    lop   = _inr(sym, q.get("open", p))
+                    lbid  = _inr(sym, q.get("bid",  p))
+                    lask  = _inr(sym, q.get("ask",  p))
+                    chg   = round(lp - lprev, 2)
                     data = {
                         "price":     lp,
                         "change":    round(chg, 2),
@@ -388,64 +384,77 @@ def _cache_set(sym, data):
     with _cache_lock: _price_cache[sym] = (time.time(), dict(data))
 
 # ══════════════════════════════════════════════════════════════════
-# CURRENCY — All displayed in ₹, USD prices converted to INR
+# ══════════════════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════════════════════
+# CURRENCY — All prices displayed in ₹. USD prices converted live.
+# Gold/Silver: troy oz → per 10g (MCX India standard, like Groww/Zerodha)
 # ══════════════════════════════════════════════════════════════════
 CSYMS = {"INR":"₹","USD":"₹","EUR":"₹","GBP":"₹","JPY":"₹","CNY":"₹",
          "AUD":"₹","CAD":"₹","SGD":"₹","HKD":"₹","KRW":"₹"}
 
-# Symbols whose base price is in USD — need INR conversion
-_USD_PRICED_SUFFIXES = ("=F", "-USD", "-BTC")
-_USD_PRICED_INDICES  = {"^GSPC","^IXIC","^DJI","^VIX","^N225","^HSI","^FTSE","^GDAXI","^RUT"}
+# Metals priced per troy oz → show per 10g (MCX standard)
+_METALS_PER10G = {"GC=F","MGC=F","SI=F","PL=F","PA=F"}
 
-# USD/INR rate — fetched live, cached 5 min
-_usdinr_rate  = 84.0
-_usdinr_ts    = 0.0
-_usdinr_lock  = threading.Lock()
-_USDINR_TTL   = 300
+# USD/INR live rate — cached 5 min
+_fx_rate    = 84.0
+_fx_rate_ts = 0.0
+_fx_lock    = threading.Lock()
 
-def _get_usdinr():
-    """Return live USD/INR rate, cached for 5 min."""
-    global _usdinr_rate, _usdinr_ts
-    with _usdinr_lock:
-        if time.time() - _usdinr_ts < _USDINR_TTL:
-            return _usdinr_rate
+def _live_fx():
+    """Return live USD/INR rate. Cached 5 min. Falls back to 84."""
+    global _fx_rate, _fx_rate_ts
+    with _fx_lock:
+        if time.time() - _fx_rate_ts < 300:
+            return _fx_rate
     try:
-        sess = _get_session(); crumb = _get_crumb()
+        s = _get_session(); c = _get_crumb()
         for base in _BASES:
-            url = f"{base}/v7/finance/quote"
             params = {"symbols":"USDINR=X","fields":"regularMarketPrice","formatted":"false"}
-            if crumb: params["crumb"] = crumb
-            r = sess.get(url, params=params, timeout=5)
+            if c: params["crumb"] = c
+            r = s.get(f"{base}/v7/finance/quote", params=params, timeout=6)
             if r.status_code == 200:
                 res = ((r.json().get("quoteResponse") or {}).get("result") or [None])[0]
                 if res:
-                    p = res.get("regularMarketPrice")
-                    if p and float(p) > 50:
-                        with _usdinr_lock:
-                            _usdinr_rate = float(p)
-                            _usdinr_ts   = time.time()
-                        return _usdinr_rate
+                    rate = res.get("regularMarketPrice")
+                    if rate and 70 < float(rate) < 200:
+                        with _fx_lock:
+                            _fx_rate    = float(rate)
+                            _fx_rate_ts = time.time()
+                        return _fx_rate
     except Exception:
         pass
-    return _usdinr_rate
+    return _fx_rate
 
-def _is_usd_priced(sym):
-    """True if this symbol's price is quoted in USD."""
-    s = str(sym).upper()
-    # Futures and crypto
-    if any(s.endswith(sfx) for sfx in _USD_PRICED_SUFFIXES): return True
-    # Major global indices
-    if s in _USD_PRICED_INDICES: return True
-    # US stocks: no dot suffix, not Indian index
-    if ("." not in s and not s.startswith("^") and
-        "NIFTY" not in s and "SENSEX" not in s and
-        not s.endswith("=X")):
-        return True
-    return False
+def _inr(sym, val):
+    """Convert one price value to INR. Handles metals per-10g."""
+    if val is None: return None
+    v = float(val); s = str(sym).upper().strip()
+    # Already INR — Indian stocks, NSE/BSE indices
+    if (s.endswith(".NS") or s.endswith(".BO") or
+        any(x in s for x in ("^NSEI","^BSESN","^CNX","NIFTY","SENSEX","INDIAVIX"))):
+        return round(v, 2)
+    # Metals: per troy oz → per 10g (divide by 3.11035)
+    if s in _METALS_PER10G:
+        return round(v * _live_fx() / 3.11035, 2)
+    # Other USD-priced: futures, crypto, US stocks, global indices
+    if (s.endswith("=F") or s.endswith("-USD") or s.endswith("-BTC") or
+        s in {"^GSPC","^IXIC","^DJI","^VIX","^N225","^HSI","^FTSE","^GDAXI","^RUT"} or
+        ("." not in s and not s.startswith("^") and not s.endswith("=X"))):
+        return round(v * _live_fx(), 2)
+    return round(v, 2)  # forex pairs, unknown — return as-is
+
+def _df_inr(sym, df):
+    """Apply _inr() to all OHLC columns of a DataFrame in-place copy."""
+    if df is None or df.empty: return df
+    df = df.copy()
+    for col in ("Open","High","Low","Close"):
+        if col in df.columns:
+            df[col] = df[col].apply(lambda x: _inr(sym, x) if x is not None else x)
+    return df
 
 def detect_currency(sym):
-    # Always INR — all prices shown with ₹
-    return "INR"
+    return "INR"   # always ₹ for Indian users
+
 
 def safe(v):
     try:
@@ -651,16 +660,14 @@ def price():
     if chg is None: chg=p-prev
     if pct is None: pct=(chg/prev*100) if prev else 0
 
-    # ── Convert USD prices → INR ──────────────────────────────
-    if _is_usd_priced(sym):
-        rate = _get_usdinr()
-        p    = round(float(p)    * rate, 2)
-        hi   = round(float(hi)   * rate, 2)
-        lo   = round(float(lo)   * rate, 2)
-        op   = round(float(op)   * rate, 2)
-        prev = round(float(prev) * rate, 2)
-        chg  = round(p - prev, 2)
-        # pct stays same — percentage is currency-neutral
+    # ── Convert USD → INR (metals also get troy oz → per 10g) ────
+    # Convert to INR (handles metals per-10g)
+    p    = _inr(sym, p)
+    hi   = _inr(sym, hi)
+    lo   = _inr(sym, lo)
+    op   = _inr(sym, op)
+    prev = _inr(sym, prev)
+    chg  = round((p or 0) - (prev or 0), 2)
 
     result={
         "price":round(p,2),"change":round(chg,2),"changePct":round(pct,4),
@@ -721,6 +728,7 @@ def ohlc():
         code=detect_currency(sym) or "USD"; cs2=CSYMS.get(code,"$")
         df=_history(sym,period,interval)
         if df.empty: return jsonify({"error":f"No chart data for {sym}."})
+        df=_df_inr(sym, df)   # USD→INR (+ per-10g for gold/silver)
         is_daily=interval in ("1d","1wk","1mo")
         rows=[]
         for ts,row in df.iterrows():
@@ -757,6 +765,7 @@ def indicators():
         code=detect_currency(sym) or "USD"; cs2=CSYMS.get(code,"$")
         df=_history(sym,"6mo","1d")
         if df.empty: return jsonify({"error":"No data for "+sym})
+        df=_df_inr(sym, df)   # USD→INR conversion
         c,h,lo,v=df["Close"],df["High"],df["Low"],df["Volume"]
         dates=[str(x)[:10] for x in df.index]
         ema9=c.ewm(span=9,adjust=False).mean()
@@ -845,6 +854,7 @@ def predict():
                 labels=["Now","+1d","+2d","+3d","+5d"]; tkeys=["1d","2d","3d","5d"]
         if df.empty or len(df)<5:
             return jsonify({"error":f"No data for {sym}."})
+        df=_df_inr(sym, df)   # USD→INR conversion for commodities/crypto/US stocks
         c,h,lo,v=df["Close"],df["High"],df["Low"],df["Volume"]
         def fv(s):
             val=float(s.iloc[-1]); return 0 if (np.isnan(val) or np.isinf(val)) else val
@@ -1024,6 +1034,7 @@ def predict():
                 "color":"#00D09C" if float(c.iloc[idx2])>sv[idx2] else "#F45E6D"})
         dfd=_history(sym,"3mo","1d"); macro="⚪ Insufficient data"
         if not dfd.empty and len(dfd)>10:
+            dfd=_df_inr(sym, dfd)
             cd=dfd["Close"]
             e50d=float(cd.ewm(span=50,adjust=False).mean().iloc[-1])
             e200d=float(cd.ewm(span=200,adjust=False).mean().iloc[-1]) if len(cd)>=200 else e50d
@@ -1291,6 +1302,20 @@ def api_chat():
 # ══════════════════════════════════════════════════════════════════
 # DEBUG
 # ══════════════════════════════════════════════════════════════════
+@app.route("/debug/currency")
+def debug_currency():
+    """Check live USD/INR rate and sample commodity conversion."""
+    rate = _live_fx()
+    samples = {}
+    for sym in ["GC=F","CL=F","BTC-USD","AAPL","^GSPC"]:
+        q = _v7_quote(sym)
+        if q:
+            raw = q["price"]
+            converted = _inr(sym, raw)
+            samples[sym] = {"raw_usd": round(raw,2), "inr": converted,
+                            "per10g": sym in _METALS_PER10G}
+    return jsonify({"usdinr_rate": rate, "samples": samples})
+
 @app.route("/debug/yahoo")
 def debug_yahoo():
     crumb=_get_crumb()
@@ -1329,4 +1354,3 @@ def ai():        return render_template("ai.html")
 
 if __name__=="__main__":
     app.run(debug=True, threaded=True, use_reloader=False, host="0.0.0.0", port=5000)
-    
