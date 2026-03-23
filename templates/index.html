@@ -2189,77 +2189,138 @@ function _startOptSSE() {
 
 function _renderOptChain(d) {
   const cs2 = "₹";
+
+  if (d.full) {
+    // ── Full rebuild (first load or spot change) ──────────────
+    const pColor = d.pcrOI>1.3?"var(--g)":d.pcrOI<0.7?"var(--r)":"var(--am)";
+    const pct    = Math.min(100,(d.pcrOI/2)*100);
+    const expBtns = (d.expiries||[]).slice(0,8).map((e,i)=>
+      `<button class="exp-btn ${i===optIdx?"on":""}" onclick="loadOpt(${i})">${e}</button>`).join("");
+
+    const liveTag = `<span style="display:inline-flex;align-items:center;gap:3px;font-size:9px;color:var(--g);font-weight:800"><span class="live-dot"></span>LIVE</span>`;
+
+    const rowHtml = (rows, side) => rows.map((r,ri) => {
+      const oi = r.openInterest||0;
+      const chOI = r.oiChange||0;
+      const uid = `${side}-${ri}`;
+      return `<div class="chain-row" id="cr-${uid}">
+        <span>${fmtP(cs2,r.strike)}</span>
+        <span id="cp-${uid}">${fmtP(cs2,r.lastPrice)}</span>
+        <span id="oi-${uid}" style="font-weight:700">${oi.toLocaleString("en-IN")}</span>
+        <span id="do-${uid}" class="${chOI>=0?"coi-up":"coi-dn"}">${chOI>=0?"+":""}${chOI.toLocaleString("en-IN")}</span>
+        <span>${((r.impliedVolatility||0)*100).toFixed(0)}%</span>
+      </div>`;
+    }).join("");
+
+    document.getElementById("optInner").innerHTML = `
+      ${d.synthetic?`<div style="background:rgba(255,184,77,.12);border:1px solid var(--am);border-radius:8px;padding:6px 10px;font-size:9px;color:var(--am);margin-bottom:6px;display:flex;gap:6px"><span>⚠️</span><span><b>Simulated Data</b> — Real options unavailable. Black-Scholes synthetic chain.</span></div>`:""}
+      <div class="exp-row">${expBtns}</div>
+      <div class="oi-row">
+        <div class="oi-card call">
+          <div class="oi-lbl">Call OI ${liveTag}</div>
+          <div class="oi-val" id="liveCallOI">${d.totalCallOI.toLocaleString("en-IN")}</div>
+          <div class="oi-chg" id="liveCallVol" style="color:var(--g)">Vol ${d.totalCallVol.toLocaleString("en-IN")}</div>
+        </div>
+        <div class="oi-card put">
+          <div class="oi-lbl">Put OI ${liveTag}</div>
+          <div class="oi-val" id="livePutOI">${d.totalPutOI.toLocaleString("en-IN")}</div>
+          <div class="oi-chg" id="livePutVol" style="color:var(--r)">Vol ${d.totalPutVol.toLocaleString("en-IN")}</div>
+        </div>
+      </div>
+      <div class="pcr-summary">
+        <div class="pcr-card">
+          <div class="pcr-lbl">PCR ${liveTag}</div>
+          <div class="pcr-val" id="livePCR" style="color:${pColor}">${d.pcrOI}</div>
+          <div class="pcr-bar"><div class="pcr-fill" id="livePCRBar" style="width:${pct}%;background:${pColor}"></div></div>
+          <div style="font-size:9px;color:${pColor};font-weight:700;margin-top:2px" id="livePCRSig">${d.pcrSignal||""}</div>
+        </div>
+        <div class="pcr-card"><div class="pcr-lbl">Max Pain</div><div class="pcr-val" id="liveMaxPain" style="font-size:12px">${d.maxPain?fmtP(cs2,d.maxPain):"—"}</div></div>
+        <div class="pcr-card"><div class="pcr-lbl">Expiry</div><div class="pcr-val" style="font-size:10px;color:var(--am)">${d.selectedExpiry||"—"}</div></div>
+        <div class="pcr-card"><div class="pcr-lbl">Spot ${liveTag}</div><div class="pcr-val" id="liveSpot" style="font-size:11px">${d.spotPrice?fmtP(cs2,d.spotPrice):"—"}</div></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:4px">
+        <div>
+          <div class="chain-hdr" style="grid-template-columns:repeat(5,1fr)"><span>Strike</span><span>Price</span><span>OI</span><span>ΔOI</span><span>IV</span></div>
+          <div class="chain-hdr" style="font-size:9px;color:var(--g);padding:2px 8px;font-weight:800">CALLS</div>
+          <div id="callsBody">${rowHtml(d.calls||[],"c")}</div>
+        </div>
+        <div>
+          <div class="chain-hdr" style="grid-template-columns:repeat(5,1fr)"><span>Strike</span><span>Price</span><span>OI</span><span>ΔOI</span><span>IV</span></div>
+          <div class="chain-hdr" style="font-size:9px;color:var(--r);padding:2px 8px;font-weight:800">PUTS</div>
+          <div id="putsBody">${rowHtml(d.puts||[],"p")}</div>
+        </div>
+      </div>`;
+    return;
+  }
+
+  // ── Fast tick update — update in-place without rebuilding DOM ──
+  // Update totals
+  const cOIel = document.getElementById("liveCallOI");
+  const pOIel = document.getElementById("livePutOI");
+  const cVel  = document.getElementById("liveCallVol");
+  const pVel  = document.getElementById("livePutVol");
+  if (cOIel) _flashNum(cOIel, d.totalCallOI.toLocaleString("en-IN"), d.totalCallOI > (parseInt(cOIel.textContent.replace(/,/g,""))||0));
+  if (pOIel) _flashNum(pOIel, d.totalPutOI.toLocaleString("en-IN"),  d.totalPutOI  > (parseInt(pOIel.textContent.replace(/,/g,""))||0));
+  if (cVel)  cVel.textContent = "Vol " + d.totalCallVol.toLocaleString("en-IN");
+  if (pVel)  pVel.textContent = "Vol " + d.totalPutVol.toLocaleString("en-IN");
+
+  // Update PCR
+  const pcrEl  = document.getElementById("livePCR");
+  const pcrBar = document.getElementById("livePCRBar");
+  const pcrSig = document.getElementById("livePCRSig");
   const pColor = d.pcrOI>1.3?"var(--g)":d.pcrOI<0.7?"var(--r)":"var(--am)";
-  const pct    = Math.min(100,(d.pcrOI/2)*100);
-  const expBtns = (d.expiries||[]).slice(0,8).map((e,i)=>
-    `<button class="exp-btn ${i===optIdx?"on":""}" onclick="loadOpt(${i})">${e}</button>`).join("");
+  if (pcrEl)  { pcrEl.textContent = d.pcrOI; pcrEl.style.color = pColor; }
+  if (pcrBar) { pcrBar.style.width = Math.min(100,(d.pcrOI/2)*100)+"%"; pcrBar.style.background = pColor; }
+  if (pcrSig) { pcrSig.textContent = d.pcrSignal||""; pcrSig.style.color = pColor; }
 
-  // Calls table with OI change colour coding
-  const callRows = (d.calls||[]).map(r => {
-    const cOI = r.openInterest||0;
-    const chOI= r.oiChange||0;
-    return `<div class="chain-row">
-      <span>${fmtP(cs2,r.strike)}</span>
-      <span>${fmtP(cs2,r.lastPrice)}</span>
-      <span style="font-weight:700">${cOI.toLocaleString("en-IN")}</span>
-      <span class="${chOI>=0?"coi-up":"coi-dn"}">${chOI>=0?"+":""}${chOI.toLocaleString("en-IN")}</span>
-      <span>${((r.impliedVolatility||0)*100).toFixed(0)}%</span>
-    </div>`;
-  }).join("");
+  // Update spot
+  const spotEl = document.getElementById("liveSpot");
+  if (spotEl && d.spotPrice) spotEl.textContent = fmtP("₹", d.spotPrice);
 
-  const putRows = (d.puts||[]).map(r => {
-    const pOI = r.openInterest||0;
-    const chOI= r.oiChange||0;
-    return `<div class="chain-row">
-      <span>${fmtP(cs2,r.strike)}</span>
-      <span>${fmtP(cs2,r.lastPrice)}</span>
-      <span style="font-weight:700">${pOI.toLocaleString("en-IN")}</span>
-      <span class="${chOI>=0?"coi-up":"coi-dn"}">${chOI>=0?"+":""}${chOI.toLocaleString("en-IN")}</span>
-      <span>${((r.impliedVolatility||0)*100).toFixed(0)}%</span>
-    </div>`;
-  }).join("");
+  // Update max pain
+  const mpEl = document.getElementById("liveMaxPain");
+  if (mpEl && d.maxPain) mpEl.textContent = fmtP("₹", d.maxPain);
 
-  // Live pulse indicator
-  const liveTag = `<span style="display:inline-flex;align-items:center;gap:4px;font-size:9px;color:var(--g);font-weight:800">
-    <span style="width:6px;height:6px;border-radius:50%;background:var(--g);animation:pulse 1s infinite"></span>LIVE</span>`;
+  // Update each call row in-place
+  (d.calls||[]).forEach((r,i) => {
+    const uid = `c-${i}`;
+    const prEl = document.getElementById(`cp-${uid}`);
+    const oiEl = document.getElementById(`oi-${uid}`);
+    const doEl = document.getElementById(`do-${uid}`);
+    if (prEl && r.lastPrice != null) prEl.textContent = fmtP("₹", r.lastPrice);
+    if (oiEl) _flashNum(oiEl, (r.openInterest||0).toLocaleString("en-IN"), (r.oiChange||0)>0);
+    if (doEl) {
+      const d2 = r.oiChange||0;
+      doEl.textContent = (d2>=0?"+":"")+d2.toLocaleString("en-IN");
+      doEl.className   = d2>=0?"coi-up":"coi-dn";
+    }
+  });
 
-  document.getElementById("optInner").innerHTML = `
-    ${d.synthetic?`<div style="background:rgba(255,184,77,.12);border:1px solid var(--am);border-radius:8px;padding:7px 12px;font-size:9px;color:var(--am);margin-bottom:6px;display:flex;align-items:center;gap:6px"><span>⚠️</span><span><strong>Simulated Data</strong> — Real options unavailable. Black-Scholes synthetic chain shown.</span></div>`:""}
-    <div class="exp-row">${expBtns}</div>
-    <div class="oi-row">
-      <div class="oi-card call">
-        <div class="oi-lbl">Call OI ${liveTag}</div>
-        <div class="oi-val" id="liveCallOI">${d.totalCallOI.toLocaleString("en-IN")}</div>
-        <div class="oi-chg" style="color:var(--g)">Vol ${d.totalCallVol.toLocaleString("en-IN")}</div>
-      </div>
-      <div class="oi-card put">
-        <div class="oi-lbl">Put OI ${liveTag}</div>
-        <div class="oi-val" id="livePutOI">${d.totalPutOI.toLocaleString("en-IN")}</div>
-        <div class="oi-chg" style="color:var(--r)">Vol ${d.totalPutVol.toLocaleString("en-IN")}</div>
-      </div>
-    </div>
-    <div class="pcr-summary">
-      <div class="pcr-card"><div class="pcr-lbl">PCR</div><div class="pcr-val" style="color:${pColor}">${d.pcrOI}</div><div class="pcr-bar"><div class="pcr-fill" style="width:${pct}%;background:${pColor}"></div></div></div>
-      <div class="pcr-card"><div class="pcr-lbl">Max Pain</div><div class="pcr-val" style="font-size:12px">${d.maxPain?fmtP(cs2,d.maxPain):"—"}</div></div>
-      <div class="pcr-card"><div class="pcr-lbl">Expiry</div><div class="pcr-val" style="font-size:10px;color:var(--am)">${d.selectedExpiry||"—"}</div></div>
-      <div class="pcr-card"><div class="pcr-lbl">Spot</div><div class="pcr-val" style="font-size:11px">${d.spotPrice?fmtP(cs2,d.spotPrice):"—"}</div></div>
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:4px">
-      <div>
-        <div class="chain-hdr" style="grid-template-columns:repeat(5,1fr)">
-          <span>Strike</span><span>Price</span><span>OI</span><span>ΔOI</span><span>IV</span>
-        </div>
-        <div class="chain-hdr" style="font-size:9px;color:var(--g);padding:2px 8px;font-weight:800">CALLS</div>
-        ${callRows}
-      </div>
-      <div>
-        <div class="chain-hdr" style="grid-template-columns:repeat(5,1fr)">
-          <span>Strike</span><span>Price</span><span>OI</span><span>ΔOI</span><span>IV</span>
-        </div>
-        <div class="chain-hdr" style="font-size:9px;color:var(--r);padding:2px 8px;font-weight:800">PUTS</div>
-        ${putRows}
-      </div>
-    </div>`;
+  // Update each put row in-place
+  (d.puts||[]).forEach((r,i) => {
+    const uid = `p-${i}`;
+    const prEl = document.getElementById(`cp-${uid}`);
+    const oiEl = document.getElementById(`oi-${uid}`);
+    const doEl = document.getElementById(`do-${uid}`);
+    if (prEl && r.lastPrice != null) prEl.textContent = fmtP("₹", r.lastPrice);
+    if (oiEl) _flashNum(oiEl, (r.openInterest||0).toLocaleString("en-IN"), (r.oiChange||0)>0);
+    if (doEl) {
+      const d2 = r.oiChange||0;
+      doEl.textContent = (d2>=0?"+":"")+d2.toLocaleString("en-IN");
+      doEl.className   = d2>=0?"coi-up":"coi-dn";
+    }
+  });
+}
+
+// Flash number green/red on change
+function _flashNum(el, newVal, isUp) {
+  if (!el) return;
+  const old = el.textContent;
+  if (old === String(newVal)) return;
+  el.textContent = newVal;
+  el.style.transition = "none";
+  el.style.color = isUp ? "var(--g)" : "var(--r)";
+  setTimeout(() => { el.style.transition = "color 0.8s"; el.style.color = ""; }, 600);
 }
 
 /* ════ TRADINGVIEW ════ */

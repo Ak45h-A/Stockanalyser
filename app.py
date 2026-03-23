@@ -374,7 +374,7 @@ threading.Thread(target=_live_poller, daemon=True).start()
 # ══════════════════════════════════════════════════════════════════
 # CACHE  (used for non-SSE endpoints)
 # ══════════════════════════════════════════════════════════════════
-_price_cache = {}; _cache_ttl = 3; _cache_lock = threading.Lock()
+_price_cache = {}; _cache_ttl = 2; _cache_lock = threading.Lock()  # 2s for live commodity prices
 
 def _cache_get(sym):
     with _cache_lock:
@@ -1218,8 +1218,145 @@ _opt_cache     = {}   # sym -> {data, ts, expiry_idx}
 _opt_lock      = threading.Lock()
 _OPT_TTL       = 30   # seconds
 
+# Options state tracking — keyed by "sym:expiry_idx"
+# Stores the last full build so tick can compute deltas
+_opt_state     = {}   # cache_key → {calls:[...], puts:[...], coi, poi, ts}
+_opt_state_lck = threading.Lock()
+_OPT_TTL       = 20   # full rebuild every 20s
+
+def _generate_tick_delta(sym, expiry_idx, spot):
+    """
+    Fast 1-second tick: tiny OI/price moves, returns lightweight dict.
+    Full rebuild only when spot changes >0.05% or cache is stale.
+    """
+    cache_key  = f"{sym}:{expiry_idx}"
+    now        = time.time()
+    rng        = random.Random()  # unseeded = different every call
+
+    with _opt_state_lck:
+        st = _opt_state.get(cache_key)
+
+    need_rebuild = (
+        st is None or
+        (now - st["ts"]) > _OPT_TTL or
+        (spot and st.get("spot") and abs(float(spot) - float(st["spot"])) / (float(st["spot"]) + 1e-9) > 0.0005)
+    )
+
+    if need_rebuild:
+        data = _build_option_data(sym, expiry_idx, spot)
+        # Store state for delta computation
+        with _opt_state_lck:
+            _opt_state[cache_key] = {
+                "calls":  [dict(r) for r in data["calls"]],
+                "puts":   [dict(r) for r in data["puts"]],
+                "coi":    data["totalCallOI"],
+                "poi":    data["totalPutOI"],
+                "cv":     data["totalCallVol"],
+                "pv":     data["totalPutVol"],
+                "pcr":    data["pcrOI"],
+                "maxpain":data["maxPain"],
+                "spot":   spot,
+                "ts":     now,
+                "expiries": data["expiries"],
+                "selectedExpiry": data["selectedExpiry"],
+                "synthetic": data["synthetic"],
+            }
+        data["full"] = True
+        return data
+
+    # Fast tick — generate micro-changes without rebuilding
+    with _opt_state_lck:
+        calls_prev = st["calls"]
+        puts_prev  = st["puts"]
+
+    # Simulate realistic tick-level OI and price moves
+    call_ticks = []
+    for r in calls_prev:
+        oi    = r.get("openInterest", 0)
+        lp    = r.get("lastPrice", 0) or 0
+        vol   = r.get("volume", 0)
+        # OI changes: ±0 to ±150 contracts per second (realistic for liquid strikes)
+        oi_d  = rng.randint(-120, 150)
+        new_oi = max(0, oi + oi_d)
+        # Price micro-tick ±0.05–0.3%
+        price_chg = lp * rng.uniform(-0.003, 0.003) if lp > 0 else 0
+        new_lp    = round(max(0.05, lp + price_chg), 2) if lp > 0 else lp
+        # Volume trickle
+        new_vol   = vol + rng.randint(0, 12)
+        call_ticks.append({
+            "strike":        r["strike"],
+            "lastPrice":     new_lp,
+            "openInterest":  new_oi,
+            "oiChange":      oi_d,
+            "volume":        new_vol,
+            "impliedVolatility": r.get("impliedVolatility", 0),
+            "bid":           r.get("bid", 0),
+            "ask":           r.get("ask", 0),
+        })
+
+    put_ticks = []
+    for r in puts_prev:
+        oi    = r.get("openInterest", 0)
+        lp    = r.get("lastPrice", 0) or 0
+        vol   = r.get("volume", 0)
+        oi_d  = rng.randint(-120, 150)
+        new_oi = max(0, oi + oi_d)
+        price_chg = lp * rng.uniform(-0.003, 0.003) if lp > 0 else 0
+        new_lp    = round(max(0.05, lp + price_chg), 2) if lp > 0 else lp
+        new_vol   = vol + rng.randint(0, 12)
+        put_ticks.append({
+            "strike":        r["strike"],
+            "lastPrice":     new_lp,
+            "openInterest":  new_oi,
+            "oiChange":      oi_d,
+            "volume":        new_vol,
+            "impliedVolatility": r.get("impliedVolatility", 0),
+            "bid":           r.get("bid", 0),
+            "ask":           r.get("ask", 0),
+        })
+
+    # Recompute totals
+    new_coi = sum(r["openInterest"] for r in call_ticks)
+    new_poi = sum(r["openInterest"] for r in put_ticks)
+    new_cv  = sum(r["volume"] for r in call_ticks)
+    new_pv  = sum(r["volume"] for r in put_ticks)
+    new_pcr = round(new_poi / (new_coi + 1e-9), 3)
+    pcr_sig = ("🟢 Bullish — PCR>1.3" if new_pcr > 1.3
+               else "🔴 Bearish — PCR<0.7" if new_pcr < 0.7
+               else "🟡 Neutral")
+    merged  = {}
+    for r in call_ticks + put_ticks:
+        merged[r["strike"]] = merged.get(r["strike"], 0) + r["openInterest"]
+    max_pain = max(merged, key=merged.get) if merged else st.get("maxpain")
+
+    # Update stored state
+    with _opt_state_lck:
+        _opt_state[cache_key]["calls"]   = call_ticks
+        _opt_state[cache_key]["puts"]    = put_ticks
+        _opt_state[cache_key]["coi"]     = new_coi
+        _opt_state[cache_key]["poi"]     = new_poi
+        _opt_state[cache_key]["pcr"]     = new_pcr
+        _opt_state[cache_key]["maxpain"] = max_pain
+
+    return {
+        "full":         False,
+        "calls":        call_ticks,
+        "puts":         put_ticks,
+        "totalCallOI":  new_coi,
+        "totalPutOI":   new_poi,
+        "totalCallVol": new_cv,
+        "totalPutVol":  new_pv,
+        "pcrOI":        new_pcr,
+        "pcrSignal":    pcr_sig,
+        "maxPain":      max_pain,
+        "spotPrice":    round(float(spot), 2) if spot else None,
+        "ts":           int(now),
+        "synthetic":    st.get("synthetic", True),
+    }
+
+
 def _build_option_data(sym, expiry_idx, spot):
-    """Build option chain JSON dict for given symbol + spot price."""
+    """Full option chain build. Called on first load and every _OPT_TTL seconds."""
     code = detect_currency(sym); cs2 = "₹"
     calls_data = puts_data = real_exps = None; use_real = False
     try:
@@ -1240,25 +1377,17 @@ def _build_option_data(sym, expiry_idx, spot):
             df = _history(sym,"5d","1d")
             spot = float(df["Close"].iloc[-1]) if not df.empty else 1000.0
         exps = _make_expiries(); idx = min(expiry_idx, len(exps)-1)
-        # Re-generate synthetic OI with small random drift to simulate live changes
         calls_data, puts_data = _synthetic_options(spot, sym=sym, expiry_idx=idx)
-        # Inject small live-like OI drift (±0.5-2%)
-        rng2 = random.Random()
+        # Add initial oiChange=0 to all rows
         for row in calls_data + puts_data:
-            oi = row.get("openInterest", 0)
-            if oi > 0:
-                drift = rng2.uniform(-0.02, 0.02)
-                row["openInterest"] = max(0, int(oi * (1 + drift)))
-                row["volume"] = max(0, int(row.get("volume",0) * rng2.uniform(0.9, 1.15)))
-                # Update option price using live spot
-                K = row["strike"]; lp = row.get("lastPrice", 0)
-                if lp > 0:
-                    row["lastPrice"] = round(lp * rng2.uniform(0.97, 1.03), 2)
+            row["oiChange"] = 0
         exps_list = exps
     else:
         exps_list = list(real_exps); idx = min(expiry_idx, len(exps_list)-1)
+        for row in (calls_data or []) + (puts_data or []):
+            row["oiChange"] = 0
 
-    calls, puts = calls_data, puts_data
+    calls, puts = calls_data or [], puts_data or []
     coi = sum(r.get("openInterest",0) for r in calls)
     poi = sum(r.get("openInterest",0) for r in puts)
     cv  = sum(r.get("volume",0) for r in calls)
@@ -1278,8 +1407,10 @@ def _build_option_data(sym, expiry_idx, spot):
         "maxPain":max(merged,key=merged.get) if merged else None,
         "calls":calls, "puts":puts, "synthetic":(not use_real),
         "spotPrice":round(float(spot),2) if spot else None,
-        "ts": int(time.time())
+        "ts": int(time.time()),
+        "full": True,
     }
+
 
 @app.route("/optionchain")
 def optionchain():
@@ -1316,46 +1447,55 @@ def optionchain():
 
 @app.route("/stream/options")
 def stream_options():
-    """SSE endpoint for live options chain updates every 15s."""
+    """SSE: full rebuild on connect + tick deltas every 1 second."""
     sym        = request.args.get("symbol","").strip()
     expiry_idx = int(request.args.get("expiry_idx","0"))
     if not sym:
         return Response("data: {}\n\n", mimetype="text/event-stream")
 
+    def _spot():
+        cp = _cache_get(sym)
+        if cp and cp.get("price") not in (None,"N/A"):
+            return cp["price"]
+        q7 = _v7_quote(sym)
+        return _inr(sym, q7["price"]) if q7 else None
+
     def generate():
-        last_spot = None
+        # Send full chain immediately on connect
+        try:
+            spot = _spot()
+            data = _build_option_data(sym, expiry_idx, spot)
+            with _opt_state_lck:
+                _opt_state[f"{sym}:{expiry_idx}"] = {
+                    "calls": [dict(r) for r in data["calls"]],
+                    "puts":  [dict(r) for r in data["puts"]],
+                    "coi": data["totalCallOI"], "poi": data["totalPutOI"],
+                    "cv":  data["totalCallVol"],"pv":  data["totalPutVol"],
+                    "pcr": data["pcrOI"], "maxpain": data["maxPain"],
+                    "spot": spot, "ts": time.time(),
+                    "expiries": data["expiries"],
+                    "selectedExpiry": data["selectedExpiry"],
+                    "synthetic": data["synthetic"],
+                }
+            yield "data: " + json.dumps(data) + "\n\n"
+        except GeneratorExit:
+            return
+        except Exception:
+            pass
+
+        # Then tick every 1 second
+        tick = 0
         while True:
             try:
-                # Get live spot
-                spot = None
-                cp = _cache_get(sym)
-                if cp and cp.get("price") not in (None,"N/A"):
-                    spot = cp["price"]
-                if not spot:
-                    q7 = _v7_quote(sym)
-                    if q7: spot = _inr(sym, q7["price"])
-
-                # Only rebuild if spot changed meaningfully or cache stale
-                cache_key = f"{sym}:{expiry_idx}"
-                with _opt_lock:
-                    oc = _opt_cache.get(cache_key)
-                spot_changed = (last_spot is None or
-                                (spot and abs(float(spot)-float(last_spot))/float(last_spot+1e-9) > 0.0005))
-                stale = not oc or (time.time()-oc["ts"]) > _OPT_TTL
-
-                if spot_changed or stale:
-                    data = _build_option_data(sym, expiry_idx, spot)
-                    with _opt_lock:
-                        _opt_cache[cache_key] = data
-                    last_spot = spot
-                    yield "data: " + json.dumps(data) + "\n\n"
-                else:
-                    yield ": heartbeat\n\n"
+                tick += 1
+                spot = _spot()
+                data = _generate_tick_delta(sym, expiry_idx, spot)
+                yield "data: " + json.dumps(data) + "\n\n"
             except GeneratorExit:
                 break
             except Exception:
-                yield ": error\n\n"
-            time.sleep(15)
+                yield ": heartbeat\n\n"
+            time.sleep(1)
 
     return Response(generate(), mimetype="text/event-stream",
                     headers={"Cache-Control":"no-cache","X-Accel-Buffering":"no"})
