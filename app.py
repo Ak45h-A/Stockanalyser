@@ -397,97 +397,81 @@ CSYMS = {"INR":"₹","USD":"₹","EUR":"₹","GBP":"₹","JPY":"₹","CNY":"₹"
 # Metals priced per troy oz → show per 10g (MCX standard)
 _METALS_PER10G = {"GC=F","MGC=F","SI=F","PL=F","PA=F"}
 
-# USD/INR live rate — cached 2 min, refreshed aggressively
-_fx_rate    = 93.0   # updated fallback (March 2026 actual rate)
-_fx_rate_ts = 0.0
-_fx_lock    = threading.Lock()
-
-def _fetch_usdinr_once(session, crumb, base):
-    """Single attempt to get USD/INR from one Yahoo base URL."""
-    params = {
-        "symbols": "USDINR=X",
-        "fields":  "regularMarketPrice,regularMarketPreviousClose",
-        "formatted": "false",
-    }
-    if crumb: params["crumb"] = crumb
-    r = session.get(f"{base}/v7/finance/quote", params=params, timeout=8)
-    if r.status_code == 200:
-        res = ((r.json().get("quoteResponse") or {}).get("result") or [None])[0]
-        if res:
-            rate = res.get("regularMarketPrice") or res.get("regularMarketPreviousClose")
-            if rate and 75 < float(rate) < 200:   # sanity: INR/USD should be 75-200
-                return float(rate)
-    return None
+# ── USD/INR live rate — uses same _v7_quote pipeline as stock prices ──
+_fx_rate     = 87.0   # fallback: actual March 2026 rate (~87 INR per USD)
+_fx_rate_ts  = 0.0
+_fx_lock     = threading.Lock()
+_FX_TTL      = 60     # refresh every 60s
 
 def _live_fx():
     """
-    Return live USD/INR rate, cached for 2 minutes.
-    Tries v7/quote first, then v8/chart as fallback.
-    Falls back to last known rate (never returns stale 84).
+    Fetch live USD/INR rate using _v7_quote("USDINR=X").
+    This reuses the warmed Yahoo session + crumb — same pipeline
+    that works for Nifty/stock prices. Falls back to last known rate.
     """
     global _fx_rate, _fx_rate_ts
-    # Return cached if fresh
     with _fx_lock:
-        if _fx_rate_ts > 0 and (time.time() - _fx_rate_ts) < 120:
+        if _fx_rate_ts > 0 and (time.time() - _fx_rate_ts) < _FX_TTL:
             return _fx_rate
 
     fetched = None
+
+    # Method 1: _v7_quote (most reliable — reuses warmed session)
     try:
-        s = _get_session(); c = _get_crumb()
-        # Try both query servers
-        for base in _BASES:
-            fetched = _fetch_usdinr_once(s, c, base)
-            if fetched: break
+        q = _v7_quote("USDINR=X")
+        if q and q.get("price") and 75 < float(q["price"]) < 200:
+            fetched = float(q["price"])
+    except Exception:
+        pass
 
-        # Fallback: v8 chart for USDINR=X (2-day, 1-day interval)
-        if not fetched:
+    # Method 2: _v8_price as secondary fallback
+    if not fetched:
+        try:
+            q8 = _v8_price("USDINR=X")
+            if q8 and q8.get("price") and 75 < float(q8["price"]) < 200:
+                fetched = float(q8["price"])
+        except Exception:
+            pass
+
+    # Method 3: direct v8 chart fetch with explicit crumb
+    if not fetched:
+        try:
+            sess = _get_session(); crumb = _get_crumb()
             for base in _BASES:
-                try:
-                    url = f"{base}/v8/finance/chart/USDINR%3DX"
-                    params = {"interval":"1d","range":"2d","formatted":"false"}
-                    if c: params["crumb"] = c
-                    r = s.get(url, params=params, timeout=8)
-                    if r.status_code == 200:
-                        meta = (r.json().get("chart",{}).get("result") or [{}])[0].get("meta",{})
-                        p = meta.get("regularMarketPrice") or meta.get("previousClose")
-                        if p and 75 < float(p) < 200:
-                            fetched = float(p); break
-                except Exception: pass
-
-        # Fallback: ExchangeRate-API (free, no auth)
-        if not fetched:
-            try:
-                r2 = requests.get(
-                    "https://open.er-api.com/v6/latest/USD",
-                    timeout=5,
-                    headers={"User-Agent":"Mozilla/5.0"}
-                )
-                if r2.status_code == 200:
-                    inr = r2.json().get("rates",{}).get("INR")
-                    if inr and 75 < float(inr) < 200:
-                        fetched = float(inr)
-            except Exception: pass
-
-    except Exception: pass
+                url = f"{base}/v8/finance/chart/USDINR%3DX"
+                params = {"interval": "1d", "range": "5d"}
+                if crumb: params["crumb"] = crumb
+                r = sess.get(url, params=params, timeout=8)
+                if r.status_code == 200:
+                    meta = (r.json().get("chart", {}).get("result") or [{}])[0].get("meta", {})
+                    p = meta.get("regularMarketPrice") or meta.get("previousClose")
+                    if p and 75 < float(p) < 200:
+                        fetched = float(p)
+                        break
+        except Exception:
+            pass
 
     if fetched:
         with _fx_lock:
-            _fx_rate    = fetched
+            _fx_rate    = round(fetched, 4)
             _fx_rate_ts = time.time()
         return _fx_rate
 
-    # Nothing worked — return last known (never return stale 84 if we got better)
+    # Return last known — never degrade back to stale value
     return _fx_rate
 
-def _refresh_fx_background():
-    """Background thread: refresh USD/INR rate every 90 seconds."""
+def _refresh_fx_loop():
+    """Background: refresh USD/INR every 55s so it's always fresh."""
+    time.sleep(3)   # wait for session to warm up first
     while True:
         try:
-            _live_fx()   # this updates _fx_rate if fetch succeeds
-        except Exception: pass
-        time.sleep(90)
+            _live_fx()
+        except Exception:
+            pass
+        time.sleep(55)
 
-threading.Thread(target=_refresh_fx_background, daemon=True).start()
+threading.Thread(target=_refresh_fx_loop, daemon=True).start()
+
 
 def _inr(sym, val):
     """Convert one price value to INR. Handles metals per-10g."""
