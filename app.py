@@ -405,9 +405,8 @@ _FX_TTL      = 60     # refresh every 60s
 
 def _live_fx():
     """
-    Fetch live USD/INR rate using _v7_quote("USDINR=X").
-    This reuses the warmed Yahoo session + crumb — same pipeline
-    that works for Nifty/stock prices. Falls back to last known rate.
+    Fetch live USD/INR rate. Uses multiple Yahoo symbols + methods.
+    Falls back to 87.0 (actual March 2026 rate) if all fail.
     """
     global _fx_rate, _fx_rate_ts
     with _fx_lock:
@@ -416,38 +415,44 @@ def _live_fx():
 
     fetched = None
 
-    # Method 1: _v7_quote (most reliable — reuses warmed session)
-    try:
-        q = _v7_quote("USDINR=X")
-        if q and q.get("price") and 75 < float(q["price"]) < 200:
-            fetched = float(q["price"])
-    except Exception:
-        pass
-
-    # Method 2: _v8_price as secondary fallback
-    if not fetched:
+    # Try multiple Yahoo forex symbols for USD/INR
+    forex_syms = ["USDINR=X", "INR=X", "USD/INR"]
+    for fsym in forex_syms:
+        if fetched: break
         try:
-            q8 = _v8_price("USDINR=X")
-            if q8 and q8.get("price") and 75 < float(q8["price"]) < 200:
-                fetched = float(q8["price"])
+            q = _v7_quote(fsym)
+            if q:
+                p = q.get("price")
+                # USDINR=X returns ~84-90, INR=X might return 0.011 (1/rate)
+                if p:
+                    pf = float(p)
+                    if 75 < pf < 200:          # direct rate
+                        fetched = pf; break
+                    elif 0.005 < pf < 0.02:    # inverse (1/rate)
+                        fetched = round(1.0/pf, 4); break
         except Exception:
             pass
 
-    # Method 3: direct v8 chart fetch with explicit crumb
+    # v8 chart fallback
     if not fetched:
         try:
             sess = _get_session(); crumb = _get_crumb()
             for base in _BASES:
-                url = f"{base}/v8/finance/chart/USDINR%3DX"
-                params = {"interval": "1d", "range": "5d"}
-                if crumb: params["crumb"] = crumb
-                r = sess.get(url, params=params, timeout=8)
-                if r.status_code == 200:
-                    meta = (r.json().get("chart", {}).get("result") or [{}])[0].get("meta", {})
-                    p = meta.get("regularMarketPrice") or meta.get("previousClose")
-                    if p and 75 < float(p) < 200:
-                        fetched = float(p)
-                        break
+                for sym_enc in ["USDINR%3DX", "INR%3DX"]:
+                    try:
+                        url = f"{base}/v8/finance/chart/{sym_enc}"
+                        params = {"interval":"1d","range":"5d"}
+                        if crumb: params["crumb"] = crumb
+                        r = sess.get(url, params=params, timeout=6)
+                        if r.status_code == 200:
+                            meta = (r.json().get("chart",{}).get("result") or [{}])[0].get("meta",{})
+                            p = meta.get("regularMarketPrice") or meta.get("previousClose")
+                            if p:
+                                pf = float(p)
+                                if 75 < pf < 200:
+                                    fetched = pf; break
+                    except: pass
+                if fetched: break
         except Exception:
             pass
 
@@ -455,9 +460,6 @@ def _live_fx():
         with _fx_lock:
             _fx_rate    = round(fetched, 4)
             _fx_rate_ts = time.time()
-        return _fx_rate
-
-    # Return last known — never degrade back to stale value
     return _fx_rate
 
 def _refresh_fx_loop():
@@ -1799,6 +1801,24 @@ def api_chat():
 # ══════════════════════════════════════════════════════════════════
 # DEBUG
 # ══════════════════════════════════════════════════════════════════
+@app.route("/debug/rate")
+def debug_rate():
+    """Quick check: what is the current USD/INR rate?"""
+    # Force refresh
+    global _fx_rate_ts
+    _fx_rate_ts = 0
+    rate = _live_fx()
+    gold_q = _v7_quote("GC=F")
+    gold_raw = gold_q["price"] if gold_q else None
+    gold_inr = _inr("GC=F", gold_raw) if gold_raw else None
+    return jsonify({
+        "usdinr_rate":   rate,
+        "rate_age_s":    round(time.time() - _fx_rate_ts, 1),
+        "gold_usd_oz":   round(gold_raw,2) if gold_raw else None,
+        "gold_inr_10g":  gold_inr,
+        "formula":       f"${gold_raw:.2f} × {rate:.2f} ÷ 3.11035 = ₹{gold_inr:,.2f}" if gold_raw else "n/a",
+    })
+
 @app.route("/debug/currency")
 def debug_currency():
     """Check live USD/INR rate and sample commodity conversion."""
