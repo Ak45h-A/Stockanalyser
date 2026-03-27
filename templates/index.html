@@ -776,6 +776,44 @@ body[data-has="1"] .back-btn{display:flex}
 .svg-icon{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
 .inav a svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
 .ni-ic svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+
+/* ── OPTIONS CHART MODAL ── */
+#optChartModal{
+  display:none;position:fixed;inset:0;z-index:9999;
+  background:rgba(0,0,0,.75);backdrop-filter:blur(4px);
+  align-items:center;justify-content:center;
+}
+#optChartModal.open{display:flex}
+.oct-box{
+  background:var(--bg1);border:1px solid var(--bd2);border-radius:14px;
+  width:min(92vw,780px);max-height:90vh;display:flex;flex-direction:column;
+  box-shadow:0 20px 60px rgba(0,0,0,.7);overflow:hidden;
+}
+.oct-hdr{
+  display:flex;align-items:center;gap:10px;padding:12px 16px;
+  border-bottom:1px solid var(--bd);flex-shrink:0;
+}
+.oct-title{font-size:14px;font-weight:800;color:var(--t1);flex:1}
+.oct-meta{font-size:11px;color:var(--t3);font-family:var(--mono)}
+.oct-close{width:28px;height:28px;border:1px solid var(--bd2);background:var(--bg2);
+  color:var(--t2);border-radius:7px;cursor:pointer;font-size:14px;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.oct-close:hover{background:var(--rbg);color:var(--r);border-color:var(--r)}
+.oct-chart-wrap{flex:1;min-height:0;height:320px;position:relative}
+.oct-footer{
+  display:flex;align-items:center;gap:12px;padding:8px 16px;
+  border-top:1px solid var(--bd);flex-shrink:0;font-size:11px;
+}
+.oct-stat{display:flex;flex-direction:column;align-items:center;gap:1px}
+.oct-stat-l{font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.5px}
+.oct-stat-v{font-size:13px;font-weight:800;font-family:var(--mono);color:var(--t1)}
+.oct-tfs{display:flex;gap:4px;margin-left:auto}
+.oct-tf{padding:3px 8px;border:1px solid var(--bd2);background:var(--bg2);
+  color:var(--t3);border-radius:5px;font-size:10px;font-weight:700;cursor:pointer;
+  font-family:var(--mono)}
+.oct-tf.on{background:var(--gbg);border-color:var(--g);color:var(--g)}
+@media(max-width:600px){.oct-box{width:100vw;max-height:100dvh;border-radius:0}
+  .oct-chart-wrap{height:260px}}
 /* Light theme */
 body.lt{--bg0:#EFF3FB;--bg1:#FFFFFF;--bg2:#F5F8FE;--bg3:#E8EFF8;--bd:rgba(0,0,0,.09);--bd2:rgba(0,0,0,.17);--t1:#17243A;--t2:#4A5E78;--t3:#94A3B8}
 body.lt .topbar::after{opacity:.4}
@@ -1600,27 +1638,67 @@ async function loadLWC() {
     window._predLineSer = predLineSer;
     window._candleSer   = candleSer;
 
+    // Track price lines so we can remove old ones
+    window._srLines = window._srLines || [];
+
     window._drawPred = function(pd) {
-      if (!pd || !pd.projectedCandles) return;
+      if (!pd) return;
+
+      // ── Clear old S/R lines ──────────────────────────────────
+      if (window._srLines && window._srLines.length) {
+        window._srLines.forEach(ln => { try { candleSer && candleSer.removePriceLine(ln); } catch(e){} });
+        window._srLines = [];
+      }
+
+      // ── Draw Support/Resistance/Golden Zone/Fib lines ────────
+      if (pd.levels && candleSer) {
+        const L = pd.levels;
+        const LS = LightweightCharts.LineStyle;
+        const add = (price, color, title, style, width) => {
+          if (!price || price <= 0) return;
+          try {
+            window._srLines.push(candleSer.createPriceLine({
+              price, color, lineWidth: width||1,
+              lineStyle: style||LS.Dashed,
+              axisLabelVisible: true,
+              title,
+            }));
+          } catch(e){}
+        };
+        // Main levels
+        if (L.key_res)   add(L.key_res,  "#FF4D4D", "⬛ RESIST",   LS.Dashed,       2);
+        if (L.key_sup)   add(L.key_sup,  "#00C48C", "🟢 SUPPORT",  LS.Dashed,       2);
+        if (L.breakout && Math.abs(L.breakout - (L.key_res||0)) > 1)
+                         add(L.breakout, "#FF9500", "🚀 BREAKOUT", LS.Solid,        1);
+        // Golden zone (50%-61.8% Fib)
+        if (L.golden_hi) add(L.golden_hi,"#FFD700", "✦ GZ 50%",   LS.SparseDotted, 1);
+        if (L.golden_lo) add(L.golden_lo,"#FFD700", "✦ GZ 61.8%", LS.SparseDotted, 1);
+        // Fib retracements
+        if (L.fib_382)   add(L.fib_382, "#A0A8B8", "Fib 38.2%",  LS.SparseDotted, 1);
+        if (L.fib_236)   add(L.fib_236, "#A0A8B8", "Fib 23.6%",  LS.SparseDotted, 1);
+        if (L.fib_786)   add(L.fib_786, "#A0A8B8", "Fib 78.6%",  LS.SparseDotted, 1);
+        // VWAP
+        if (L.vwap)      add(L.vwap,    "#64D8F4", "VWAP",        LS.Dotted,       1);
+        // Extra S/R
+        (L.resistance||[]).forEach((p,i)=>{ if(Math.abs(p-(L.key_res||0))>1) add(p,"rgba(255,80,80,.5)",`R${i+1}`,LS.SparseDotted,1); });
+        (L.support||[]).forEach((p,i)=>{ if(Math.abs(p-(L.key_sup||0))>1) add(p,"rgba(0,196,140,.5)",`S${i+1}`,LS.SparseDotted,1); });
+      }
+
+      // ── Draw projected candles ───────────────────────────────
+      if (!pd.projectedCandles) return;
       const ps  = window._predSer;
       const pls = window._predLineSer;
       if (!ps || !pls) return;
       try {
         const lastReal = histData.length > 0 ? histData[histData.length-1].time : 0;
         const pdata = pd.projectedCandles.filter(c => c.time > lastReal);
-        if (pdata.length > 0) {
-          ps.setData(pdata.map(c => ({time:c.time,open:c.open,high:c.high,low:c.low,close:c.close})));
-          pls.setData(pdata.map(c => ({time:c.time, value:c.close})));
-        } else {
-          const nowU = Math.floor(Date.now()/1000);
-          const shifted = pd.projectedCandles.map((c,i) => ({
-            ...c, time: (currentBar ? currentBar.time : nowU) + (i+1) * barSecs
-          }));
-          ps.setData(shifted.map(c => ({time:c.time,open:c.open,high:c.high,low:c.low,close:c.close})));
-          pls.setData(shifted.map(c => ({time:c.time, value:c.close})));
-        }
-      } catch(e) { console.warn("predSer:", e.message); }
-    };
+        const src = pdata.length > 0 ? pdata : pd.projectedCandles.map((c,i)=>({
+          ...c, time:(currentBar?currentBar.time:Math.floor(Date.now()/1000))+(i+1)*barSecs
+        }));
+        ps.setData(src.map(c=>({time:c.time,open:c.open,high:c.high,low:c.low,close:c.close})));
+        pls.setData(src.map(c=>({time:c.time,value:c.close})));
+      } catch(e){ console.warn("predSer:",e.message); }
+    };;
     if (lastPredData) window._drawPred(lastPredData);
 
     // Sync timescales
@@ -2199,11 +2277,16 @@ function _renderOptChain(d) {
 
     const liveTag = `<span style="display:inline-flex;align-items:center;gap:3px;font-size:9px;color:var(--g);font-weight:800"><span class="live-dot"></span>LIVE</span>`;
 
+    const _expiry = d.selectedExpiry||"";
     const rowHtml = (rows, side) => rows.map((r,ri) => {
       const oi = r.openInterest||0;
       const chOI = r.oiChange||0;
       const uid = `${side}-${ri}`;
-      return `<div class="chain-row" id="cr-${uid}">
+      const optType = side==="c"?"C":"P";
+      const rowJson = JSON.stringify({lastPrice:r.lastPrice,impliedVolatility:r.impliedVolatility,openInterest:oi}).replace(/'/g,"&#39;");
+      return `<div class="chain-row" id="cr-${uid}" style="cursor:pointer"
+        title="Click to view ${optType==="C"?"CALL":"PUT"} chart at ${fmtP(cs2,r.strike)}"
+        onclick="openOptChart('${YAHOO||""}',${r.strike},'${optType}','${_expiry}',${rowJson})">
         <span>${fmtP(cs2,r.strike)}</span>
         <span id="cp-${uid}">${fmtP(cs2,r.lastPrice)}</span>
         <span id="oi-${uid}" style="font-weight:700">${oi.toLocaleString("en-IN")}</span>
@@ -2524,6 +2607,109 @@ function _updateClock() {
 }
 setInterval(_updateClock, 1000);
 _updateClock();
+
+
+/* ════ OPTIONS CHART MODAL ════ */
+let _octSym=null, _octStrike=null, _octType=null, _octExpiry=null,
+    _octInterval="5m", _octChart=null, _octRow=null;
+
+async function openOptChart(sym, strike, type, expiry, rowData) {
+  _octSym=sym; _octStrike=strike; _octType=type;
+  _octExpiry=expiry; _octRow=rowData;
+  document.getElementById("optChartModal").classList.add("open");
+  document.body.style.overflow="hidden";
+  // Set footer stats
+  document.getElementById("octStrike").textContent = fmtP("₹",strike);
+  document.getElementById("octLast").textContent   = rowData ? fmtP("₹",rowData.lastPrice) : "—";
+  document.getElementById("octIV").textContent     = rowData ? ((rowData.impliedVolatility||0)*100).toFixed(0)+"%" : "—";
+  document.getElementById("octOI").textContent     = rowData ? (rowData.openInterest||0).toLocaleString("en-IN") : "—";
+  document.getElementById("octTitle").textContent  = `${type==="C"?"CALL":"PUT"} ₹${strike.toLocaleString("en-IN")} Chart`;
+  document.getElementById("octMeta").textContent   = `${sym} · Expiry: ${expiry||"—"}`;
+  await loadOptChart(sym, strike, type, _octInterval, null);
+}
+
+async function loadOptChart(sym, strike, type, interval, tfBtn) {
+  if (sym)      _octSym=sym;
+  if (strike)   _octStrike=strike;
+  if (type)     _octType=type;
+  if (interval) _octInterval=interval;
+  if (tfBtn) {
+    document.querySelectorAll(".oct-tf").forEach(b=>b.classList.remove("on"));
+    tfBtn.classList.add("on");
+  }
+  const wrap = document.getElementById("octChartWrap");
+  if (!wrap) return;
+  wrap.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--t3);font-size:12px">Loading chart…</div>`;
+  try {
+    const url = `/option/chart?symbol=${enc(_octSym)}&strike=${_octStrike}&type=${_octType}&expiry=${encodeURIComponent(_octExpiry||"")}&interval=${_octInterval}`;
+    const d = await fetch(url).then(r=>r.json());
+    if (d.error || !d.data || !d.data.length) {
+      wrap.innerHTML=`<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--r);font-size:12px">⚠️ ${d.error||"No data"}</div>`;
+      return;
+    }
+    wrap.innerHTML="";
+    const isDark = !document.body.classList.contains("lt");
+    const bg  = isDark?"#0D1117":"#FFFFFF";
+    const txt = isDark?"#8892B0":"#4A5E78";
+    const grid= isDark?"rgba(255,255,255,.04)":"rgba(0,0,0,.06)";
+
+    if (_octChart) { try{_octChart.remove();}catch(e){} _octChart=null; }
+    const isCall = _octType==="C";
+    const oc = LightweightCharts.createChart(wrap,{
+      width:wrap.clientWidth, height:wrap.clientHeight||300,
+      layout:{background:{type:"solid",color:bg},textColor:txt},
+      grid:{vertLines:{color:grid},horzLines:{color:grid}},
+      rightPriceScale:{borderColor:grid,autoScale:true,visible:true,minimumWidth:70},
+      timeScale:{borderColor:grid,timeVisible:true,secondsVisible:false,
+        tickMarkFormatter:(u)=>{
+          const d2=new Date((u+19800)*1000);
+          return d2.getUTCHours().toString().padStart(2,"0")+":"+d2.getUTCMinutes().toString().padStart(2,"0");
+        }},
+      localization:{priceFormatter:p=>fmtP("₹",p)},
+      crosshair:{mode:LightweightCharts.CrosshairMode.Normal},
+    });
+    _octChart=oc;
+    const upC  = isCall?"#00C48C":"#F45E6D";
+    const dnC  = isCall?"#F45E6D":"#00C48C";
+    const cSer = oc.addCandlestickSeries({
+      upColor:upC,downColor:dnC,
+      borderUpColor:upC,borderDownColor:dnC,
+      wickUpColor:upC,wickDownColor:dnC,
+      priceLineVisible:true,lastValueVisible:true,
+    });
+    cSer.setData(d.data);
+
+    // Volume bars
+    const vSer = oc.addHistogramSeries({
+      color:upC+"50",priceFormat:{type:"volume"},
+      priceScaleId:"vol",scaleMargins:{top:0.8,bottom:0},
+      lastValueVisible:false,priceLineVisible:false,
+    });
+    vSer.setData(d.data.map(r=>({time:r.time,value:r.volume||0,
+      color:r.close>=r.open?upC+"60":dnC+"60"})));
+
+    // Strike price line
+    cSer.createPriceLine({price:_octStrike,color:"#FFD700",lineWidth:1,
+      lineStyle:LightweightCharts.LineStyle.Dashed,
+      axisLabelVisible:true,title:"Strike"});
+
+    oc.timeScale().fitContent();
+    new ResizeObserver(()=>{
+      if(wrap.clientWidth>0&&wrap.clientHeight>0)
+        oc.resize(wrap.clientWidth,wrap.clientHeight);
+    }).observe(wrap);
+  } catch(e){
+    wrap.innerHTML=`<div style="color:var(--r);padding:20px">${e.message}</div>`;
+  }
+}
+
+function closeOptChart() {
+  document.getElementById("optChartModal").classList.remove("open");
+  document.body.style.overflow="";
+  if(_octChart){try{_octChart.remove();}catch(e){}_octChart=null;}
+  document.getElementById("octChartWrap").innerHTML="";
+}
+document.addEventListener("keydown",e=>{ if(e.key==="Escape") closeOptChart(); });
 
 /* ════ TICKER BAR ════ */
 const TLIST = [
@@ -3132,6 +3318,30 @@ async function loadAnalysis() {
 })();
 </script>
 
+
+<!-- ══ OPTIONS CHART MODAL ══ -->
+<div id="optChartModal" onclick="if(event.target===this)closeOptChart()">
+  <div class="oct-box">
+    <div class="oct-hdr">
+      <div class="oct-title" id="octTitle">Option Chart</div>
+      <div class="oct-meta" id="octMeta"></div>
+      <button class="oct-close" onclick="closeOptChart()">✕</button>
+    </div>
+    <div class="oct-chart-wrap" id="octChartWrap"></div>
+    <div class="oct-footer">
+      <div class="oct-stat"><div class="oct-stat-l">Strike</div><div class="oct-stat-v" id="octStrike">—</div></div>
+      <div class="oct-stat"><div class="oct-stat-l">Last Price</div><div class="oct-stat-v" id="octLast">—</div></div>
+      <div class="oct-stat"><div class="oct-stat-l">IV</div><div class="oct-stat-v" id="octIV">—</div></div>
+      <div class="oct-stat"><div class="oct-stat-l">OI</div><div class="oct-stat-v" id="octOI">—</div></div>
+      <div class="oct-tfs">
+        <button class="oct-tf on" onclick="loadOptChart(null,null,null,'1m',this)">1m</button>
+        <button class="oct-tf"    onclick="loadOptChart(null,null,null,'5m',this)">5m</button>
+        <button class="oct-tf"    onclick="loadOptChart(null,null,null,'15m',this)">15m</button>
+        <button class="oct-tf"    onclick="loadOptChart(null,null,null,'1h',this)">1h</button>
+      </div>
+    </div>
+  </div>
+</div>
 <button id="_themeBtn" onclick="_toggleTheme()" title="Toggle theme">🌙</button>
 <script>
 function _toggleTheme(){const lt=document.body.classList.toggle("lt");document.getElementById("_themeBtn").textContent=lt?"☀️":"🌙";localStorage.setItem("_tai_t",lt?"l":"d");if(window.lwcM){try{window.lwcM.applyOptions({layout:{background:{type:"solid",color:lt?"#EFF3FB":"#060D18"},textColor:lt?"#4A5E78":"#8892B0"},grid:{vertLines:{color:lt?"rgba(0,0,0,.06)":"rgba(255,255,255,.04)"},horzLines:{color:lt?"rgba(0,0,0,.06)":"rgba(255,255,255,.04)"}}});}catch(e){}}}

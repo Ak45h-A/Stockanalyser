@@ -1134,6 +1134,84 @@ def predict():
         tgt_keys=tkeys if len(tkeys)==4 else ["5m","10m","15m","30m"]
         tgt_vals=[t1,t2,t3,t4]
         targets={tgt_keys[i]:{"price":round(tgt_vals[i],2),"display":fmt_price(cs2,tgt_vals[i])} for i in range(min(4,len(tgt_keys)))}
+
+        # ── SUPPORT / RESISTANCE / GOLDEN ZONE LEVELS ─────────────
+        # Use recent 50 bars for pivot calculation
+        try:
+            n_sr = min(50, len(df))
+            sr_h = h.iloc[-n_sr:]; sr_l = lo.iloc[-n_sr:]; sr_c = c.iloc[-n_sr:]
+
+            # Swing highs and lows (local extremes)
+            def _pivots(series, is_high, win=5):
+                pts=[]
+                for i in range(win, len(series)-win):
+                    v = float(series.iloc[i])
+                    window = [float(series.iloc[i+j]) for j in range(-win,win+1) if j!=0]
+                    if is_high and v >= max(window): pts.append(round(v,2))
+                    elif not is_high and v <= min(window): pts.append(round(v,2))
+                return pts
+
+            pivH = _pivots(sr_h, True,  win=3)
+            pivL = _pivots(sr_l, False, win=3)
+
+            # Cluster nearby pivots (within 0.3% of each other)
+            def _cluster(pts):
+                if not pts: return []
+                pts = sorted(pts)
+                groups=[]; g=[pts[0]]
+                for p in pts[1:]:
+                    if abs(p-g[-1])/max(g[-1],1) < 0.003: g.append(p)
+                    else: groups.append(round(sum(g)/len(g),2)); g=[p]
+                groups.append(round(sum(g)/len(g),2))
+                return groups
+
+            res_levels = sorted(_cluster(pivH), reverse=True)[:4]  # top 4 resistances
+            sup_levels = sorted(_cluster(pivL), reverse=False)[:4]  # bottom 4 supports
+
+            # Key resistance = lowest resistance above current price
+            key_res = next((r for r in sorted(res_levels) if r > cur*1.001), None) or (max(res_levels) if res_levels else round(cur+atrv*2,2))
+            # Key support = highest support below current price
+            key_sup = next((s for s in sorted(sup_levels,reverse=True) if s < cur*0.999), None) or (min(sup_levels) if sup_levels else round(cur-atrv*2,2))
+
+            # Golden zone = 61.8% Fibonacci retracement of last swing
+            recent_hi = float(h.iloc[-n_sr:].max())
+            recent_lo = float(lo.iloc[-n_sr:].min())
+            swing = recent_hi - recent_lo
+            fib_618 = round(recent_hi - swing * 0.618, 2)
+            fib_500 = round(recent_hi - swing * 0.500, 2)
+            fib_382 = round(recent_hi - swing * 0.382, 2)
+            fib_236 = round(recent_hi - swing * 0.236, 2)
+            fib_786 = round(recent_hi - swing * 0.786, 2)
+            # Golden zone: 50%–61.8%
+            golden_hi = fib_500; golden_lo = fib_618
+
+            # Breakout level = highest pivot high above current price
+            breakout = round(recent_hi, 2)
+
+            # Volume-weighted support/resistance
+            vwap_20 = float((((h+lo+c)/3)*v).rolling(min(20,len(c))).sum().iloc[-1] /
+                            (v.rolling(min(20,len(c))).sum().iloc[-1]+1e-9))
+
+            levels = {
+                "resistance":   [round(x,2) for x in sorted(res_levels)],
+                "support":      [round(x,2) for x in sorted(sup_levels)],
+                "key_res":      round(key_res,2),
+                "key_sup":      round(key_sup,2),
+                "breakout":     breakout,
+                "golden_hi":    golden_hi,
+                "golden_lo":    golden_lo,
+                "fib_786":      fib_786,
+                "fib_618":      fib_618,
+                "fib_500":      fib_500,
+                "fib_382":      fib_382,
+                "fib_236":      fib_236,
+                "vwap":         round(vwap_20,2),
+                "recent_hi":    round(recent_hi,2),
+                "recent_lo":    round(recent_lo,2),
+            }
+        except Exception:
+            levels = {}
+
         return jsonify({"direction":direction,"color":color,"score":round(score,1),"confidence":conf,
             "currentPrice":round(cur,2),"currencySymbol":cs2,"currency":code,
             "entry":entry,"entryDisplay":fmt_price(cs2,entry),
@@ -1141,7 +1219,8 @@ def predict():
             "targets":targets,"projectedCandles":proj,"markers":markers,
             "supertrendLine":st_line,"signals":signals,
             "macroTrend":macro,"rsi":round(r,1),"atr":round(atrv,2),
-            "interval":interval,"barSecs":bar_s})
+            "interval":interval,"barSecs":bar_s,
+            "levels":levels})
     except Exception as e: return jsonify({"error":str(e)})
 
 # ══════════════════════════════════════════════════════════════════
@@ -1483,6 +1562,99 @@ def stream_options():
 
     return Response(generate(), mimetype="text/event-stream",
                     headers={"Cache-Control":"no-cache","X-Accel-Buffering":"no"})
+
+# ══════════════════════════════════════════════════════════════════
+# OPTIONS OHLCV — synthetic candlestick for a single option strike
+# ══════════════════════════════════════════════════════════════════
+@app.route("/option/chart")
+def option_chart():
+    """Generate synthetic OHLC bars for a specific option strike."""
+    sym       = request.args.get("symbol","").strip()
+    strike    = request.args.get("strike","")
+    opt_type  = request.args.get("type","C").upper()   # C or P
+    expiry    = request.args.get("expiry","")
+    interval  = request.args.get("interval","5m")
+    if not sym or not strike: return jsonify({"error":"symbol and strike required"})
+
+    try:
+        S_raw = float(strike)  # strike is already in INR
+        # Convert strike back to USD for BS pricing if it's a USD symbol
+        if _is_usd_priced_check(sym):
+            rate = _live_fx()
+            if sym in _METALS_PER10G:
+                S_usd = S_raw * 3.11035 / rate
+            else:
+                S_usd = S_raw / rate
+        else:
+            S_usd = S_raw
+
+        # Get underlying price history
+        period = PERIOD_MAP.get(interval,"1d")
+        df_und = _history(sym, period, interval)
+        if df_und.empty: return jsonify({"error":"No underlying data"})
+        df_und = _df_inr(sym, df_und)
+
+        T_days_total = 7  # assume 1 week to expiry default
+        if expiry:
+            try:
+                from datetime import datetime as _dt
+                exp_dt = _dt.strptime(expiry, "%Y-%m-%d")
+                T_days_total = max(1, (exp_dt - _dt.now()).days)
+            except: pass
+
+        r_f = 0.065
+        rows = []
+        n = len(df_und)
+        bar_secs = {"1m":60,"2m":120,"5m":300,"15m":900,"30m":1800,"1h":3600,"1d":86400}.get(interval,300)
+
+        for i, (ts, row) in enumerate(df_und.iterrows()):
+            S = float(row.get("Close") or 0)
+            if S <= 0: continue
+            T_remaining = max(0.001, (T_days_total - i * bar_secs/86400) / 365.0)
+            # Estimate IV from historical vol
+            if i >= 10:
+                hist_ret = [math.log(float(df_und["Close"].iloc[j])/float(df_und["Close"].iloc[j-1]))
+                            for j in range(max(0,i-10), i) if float(df_und["Close"].iloc[j-1])>0]
+                iv = min(0.8, max(0.05, np.std(hist_ret) * math.sqrt(252))) if hist_ret else 0.18
+            else:
+                iv = 0.18
+            K = S_raw  # K in INR, S in INR
+            opt_p = _bs_price(S, K, T_remaining, r_f, iv, opt_type)
+            # Simulate OHLC around theoretical price
+            noise = opt_p * 0.015
+            rng = random.Random(int(S*1000) ^ i)
+            o = round(opt_p * rng.uniform(0.99, 1.01), 2)
+            c_ = round(opt_p, 2)
+            h_ = round(max(o, c_) + abs(rng.gauss(0, noise)), 2)
+            l_ = round(max(0.05, min(o, c_) - abs(rng.gauss(0, noise))), 2)
+            vol = int(rng.uniform(100, 5000))
+            try:
+                utc = int(ts.tz_convert("UTC").timestamp()) if (hasattr(ts,"tzinfo") and ts.tzinfo) else int(pd.Timestamp(ts).timestamp())
+            except:
+                utc = int(pd.Timestamp(ts).timestamp())
+            rows.append({"time":utc,"open":o,"high":h_,"low":l_,"close":c_,"volume":vol})
+
+        # deduplicate
+        seen=set(); unique=[]
+        for r in rows:
+            if r["time"] not in seen: seen.add(r["time"]); unique.append(r)
+
+        return jsonify({
+            "data":   unique,
+            "strike": S_raw,
+            "type":   opt_type,
+            "symbol": sym,
+            "expiry": expiry,
+            "interval": interval,
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)})
+
+def _is_usd_priced_check(sym):
+    s = str(sym).upper().strip()
+    return (s.endswith("=F") or s.endswith("-USD") or
+            s in {"^GSPC","^IXIC","^DJI","^N225","^HSI","^FTSE"} or
+            ("." not in s and not s.startswith("^") and not s.endswith("=X")))
 
 # ══════════════════════════════════════════════════════════════════
 # NEWS
